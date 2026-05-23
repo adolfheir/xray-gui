@@ -1,0 +1,21 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/contents.xcworkspacedata
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Generated
+XrayGUI.xcodeproj/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Secrets / local config
+*.env
+secrets/

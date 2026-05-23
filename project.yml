@@ -1,0 +1,45 @@
+name: XrayGUI
+options:
+  bundleIdPrefix: com.xraygui
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+  XrayGUI:
+    type: application
+    platform: macOS
+    sources:
+      - path: XrayGUI
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xraygui.app
+        INFOPLIST_FILE: XrayGUI/Info.plist
+        CODE_SIGN_ENTITLEMENTS: XrayGUI/XrayGUI.entitlements
+        PRODUCT_NAME: XrayGUI
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+
+  XrayHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: XrayHelper
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xraygui.helper
+        INFOPLIST_FILE: XrayHelper/Info.plist
+        CODE_SIGN_ENTITLEMENTS: XrayHelper/XrayHelper.entitlements
+        INSTALL_PATH: /Library/PrivilegedHelperTools
+        SKIP_INSTALL: NO
+        PRODUCT_NAME: com.xraygui.helper
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
