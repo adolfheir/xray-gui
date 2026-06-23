@@ -47,7 +47,13 @@ struct ProfilesView: View {
         }
         .navigationTitle("Profiles".localized)
         .toolbar {
-            ToolbarItem {
+            ToolbarItemGroup {
+                Button(action: { appState.saveGeneratedConfigAsProfile() }) {
+                    Label("Save current config".localized, systemImage: "doc.badge.plus")
+                }
+                .help("Save the generated config of the selected node as a profile.".localized)
+                .disabled(!appState.canSnapshotGeneratedConfig)
+
                 Button(action: { showAddSheet = true }) {
                     Label("Add Profile".localized, systemImage: "plus")
                 }
@@ -64,6 +70,9 @@ struct ProfilesView: View {
 struct ProfileRow: View {
     @EnvironmentObject var appState: AppState
     @Binding var profile: Profile
+    /// Read-only reverse-mapping of the profile JSON, parsed lazily for the inline summary.
+    @State private var inspected: ProfileInspector.Inspected?
+    @State private var showInspector = false
 
     private var isSelected: Bool {
         appState.selectedProfile?.id == profile.id
@@ -89,11 +98,21 @@ struct ProfileRow: View {
                                 Badge(text: "Missing".localized, color: .orange)
                             }
                         }
-                        Text(profile.configPath)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                        // Reverse-mapped one-line summary so the merged/raw config is
+                        // readable at a glance without opening the file.
+                        if let inspected {
+                            Text(inspected.headline)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            Text(profile.configPath)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                     }
 
                     Spacer()
@@ -109,6 +128,10 @@ struct ProfileRow: View {
 
             // Row actions.
             HStack(spacing: 4) {
+                IconButton("eye", tooltip: "Inspect".localized) {
+                    showInspector = true
+                }
+                .disabled(inspected == nil)
                 IconButton("pencil", tooltip: "Open in Editor".localized) {
                     NSWorkspace.shared.open(profile.configURL)
                 }
@@ -121,6 +144,14 @@ struct ProfileRow: View {
             }
         }
         .padding(.vertical, 4)
+        .task(id: profile.configPath) {
+            inspected = ProfileInspector.inspect(path: profile.configPath)
+        }
+        .sheet(isPresented: $showInspector) {
+            if let inspected {
+                ProfileInspectorSheet(profileName: profile.name, inspected: inspected)
+            }
+        }
     }
 
     private func deleteProfile() {

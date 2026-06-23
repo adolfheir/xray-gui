@@ -363,6 +363,63 @@ final class AppState: ObservableObject {
         return base
     }
 
+    /// Directory holding standalone config files saved as `Profile`s. Kept separate
+    /// from the transient `current-config.json` so a snapshot survives the next launch's
+    /// regeneration.
+    private var profilesDirectory: URL {
+        let dir = configDirectory.appendingPathComponent("Profiles", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Builds the config that the current selection would launch (a single node or a
+    /// balancer group), as pretty-printed JSON — without writing the runtime file or
+    /// running `xray -test`. Used to snapshot the generated config into a `Profile`.
+    func buildCurrentConfigData() throws -> Data {
+        if let group = selectedGroup, !groupMembers(group).isEmpty {
+            return try ConfigBuilder.buildConfig(group: group,
+                                                 nodes: groupMembers(group),
+                                                 routing: routing,
+                                                 options: buildOptions)
+        }
+        guard let node = selectedNode else { throw AppError.noSelection }
+        return try ConfigBuilder.buildConfig(node: node, routing: routing, options: buildOptions)
+    }
+
+    /// True when there is a current selection (node or non-empty group) the generated
+    /// config can be built from.
+    var canSnapshotGeneratedConfig: Bool {
+        if let group = selectedGroup, !groupMembers(group).isEmpty { return true }
+        return selectedNode != nil
+    }
+
+    /// Snapshots the currently generated config into a standalone file under
+    /// `profilesDirectory` and registers it as a `Profile`, then selects it. The new
+    /// profile is independent of the live node/group — editing the node later does not
+    /// change it. Returns the created profile, or nil on failure (error surfaced via
+    /// `errorMessage`).
+    @discardableResult
+    func saveGeneratedConfigAsProfile(name: String? = nil) -> Profile? {
+        do {
+            let data = try buildCurrentConfigData()
+            let fileName = "\(UUID().uuidString).json"
+            let url = profilesDirectory.appendingPathComponent(fileName)
+            try data.write(to: url, options: .atomic)
+
+            let fallback = selectedGroup?.name ?? selectedNode?.name ?? "Config"
+            let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalName = (trimmed?.isEmpty == false) ? trimmed! : fallback
+            let profile = Profile(name: finalName, configPath: url.path)
+            profiles.append(profile)
+            selectedProfileId = profile.id
+            infoMessage = "Saved profile \"%@\"".localized(finalName)
+            return profile
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Produce the config file path to launch: either a raw Profile or a freshly
     /// generated config from the selected node (validated with `xray -test`).
     func prepareConfig() throws -> String {
@@ -565,15 +622,43 @@ final class AppState: ObservableObject {
 
     // MARK: - Latency
 
+    /// If the live core is currently proxying exactly `node` — i.e. it's running, this
+    /// is the selected single node (not a balancer group or a raw custom profile) — its
+    /// local SOCKS inbound already carries that node, so tests can reuse the running
+    /// instance instead of spawning a throwaway one. Returns that port, else `nil`.
+    ///
+    /// Note: reusing the live core means the probe traverses your real routing rules, so
+    /// a test URL your rules send "direct" measures the direct path. The defaults route
+    /// foreign test endpoints through the proxy, which is the intended "real" behaviour.
+    private func liveSocksPort(for node: ProxyNode) -> Int? {
+        guard isRunning, !useCustomProfile, selectedGroupId == nil,
+              selectedNodeId == node.id, buildOptions.socksPort > 0 else { return nil }
+        return buildOptions.socksPort
+    }
+
+    /// Latency via the live core's SOCKS port when available, otherwise a throwaway instance.
+    private static func probeLatency(node: ProxyNode, livePort: Int?,
+                                     xrayPath: String, options: ConfigBuildOptions) async -> Int? {
+        if let livePort { return await LatencyTester.urlLatency(throughSOCKSPort: livePort) }
+        return await NodeLatencyProbe.measure(node: node, xrayPath: xrayPath, options: options)
+    }
+
+    /// Download speed via the live core's SOCKS port when available, otherwise a throwaway instance.
+    private static func probeSpeed(node: ProxyNode, livePort: Int?,
+                                   xrayPath: String, options: ConfigBuildOptions) async -> Double? {
+        if let livePort { return await LatencyTester.downloadSpeed(throughSOCKSPort: livePort) }
+        return await NodeLatencyProbe.measureSpeed(node: node, xrayPath: xrayPath, options: options)
+    }
+
     func testLatency(_ node: ProxyNode) {
         guard node.supportedByXray else { latency[node.id] = .failed; return }
+        guard latency[node.id] != .testing else { return } // de-dup rapid re-taps
         latency[node.id] = .testing
+        let live = liveSocksPort(for: node)
         let xrayPath = XrayCoreManager.shared.xrayBinaryPath
         let options = buildOptions
         Task {
-            // Real end-to-end probe: route a request through a throwaway instance of
-            // this node, not a bare TCP handshake to its address.
-            let ms = await NodeLatencyProbe.measure(node: node, xrayPath: xrayPath, options: options)
+            let ms = await Self.probeLatency(node: node, livePort: live, xrayPath: xrayPath, options: options)
             await MainActor.run {
                 self.latency[node.id] = ms.map { .ms($0) } ?? .failed
             }
@@ -581,13 +666,15 @@ final class AppState: ObservableObject {
     }
 
     /// Probe every node's real latency, bounding how many throwaway `xray` instances
-    /// run at once (each probe is a short-lived process).
+    /// run at once (each probe is a short-lived process). The active node reuses the
+    /// live core; the rest use throwaway instances.
     func testAllLatency() {
         let targets = nodes.filter(\.supportedByXray)
         for node in targets { latency[node.id] = .testing }
         for node in nodes where !node.supportedByXray { latency[node.id] = .failed }
         let xrayPath = XrayCoreManager.shared.xrayBinaryPath
         let options = buildOptions
+        let livePorts: [UUID: Int?] = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, liveSocksPort(for: $0)) })
         Task {
             let maxConcurrent = 5
             var pending = targets.makeIterator()
@@ -595,8 +682,9 @@ final class AppState: ObservableObject {
                 var inFlight = 0
                 func startNext() -> Bool {
                     guard let node = pending.next() else { return false }
+                    let live = livePorts[node.id] ?? nil
                     group.addTask {
-                        (node.id, await NodeLatencyProbe.measure(node: node, xrayPath: xrayPath, options: options))
+                        (node.id, await Self.probeLatency(node: node, livePort: live, xrayPath: xrayPath, options: options))
                     }
                     return true
                 }
@@ -610,16 +698,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Real download-speed test for a single node: spins up a throwaway instance and
-    /// downloads through it, reporting Mbps. On-demand only (no batch) since it
-    /// consumes real bandwidth.
+    /// Real download-speed test for a single node. Reuses the live core when this is the
+    /// active node, otherwise spins up a throwaway instance. On-demand only (no batch)
+    /// since it consumes real bandwidth.
     func testSpeed(_ node: ProxyNode) {
         guard node.supportedByXray else { speed[node.id] = .failed; return }
+        guard speed[node.id] != .testing else { return } // de-dup rapid re-taps
         speed[node.id] = .testing
+        let live = liveSocksPort(for: node)
         let xrayPath = XrayCoreManager.shared.xrayBinaryPath
         let options = buildOptions
         Task {
-            let mbps = await NodeLatencyProbe.measureSpeed(node: node, xrayPath: xrayPath, options: options)
+            let mbps = await Self.probeSpeed(node: node, livePort: live, xrayPath: xrayPath, options: options)
             await MainActor.run {
                 self.speed[node.id] = mbps.map { .mbps($0) } ?? .failed
             }

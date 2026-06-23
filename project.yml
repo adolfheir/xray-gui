@@ -8,8 +8,8 @@ options:
 settings:
   base:
     PRODUCT_NAME: XrayGUI
-    MARKETING_VERSION: 1.2.1
-    CURRENT_PROJECT_VERSION: 4
+    MARKETING_VERSION: 1.2.2
+    CURRENT_PROJECT_VERSION: 5
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
@@ -49,8 +49,8 @@ targets:
         CFBundleName: XrayGUI
         CFBundleDisplayName: XrayGUI
         CFBundleIdentifier: com.xraygui.app
-        CFBundleShortVersionString: 1.2.1
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: 1.2.2
+        CFBundleVersion: "5"
         LSMinimumSystemVersion: "13.0"
         LSUIElement: false
         XrayBundledCoreVersion: "25.9.11"

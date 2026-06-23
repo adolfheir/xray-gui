@@ -110,7 +110,16 @@ final class HelperClient {
 
     /// Stop any running TUN, then unregister the launchd daemon via `SMAppService`.
     func uninstallHelper(completion: @escaping (Bool, String) -> Void) {
+        // The stopTUN reply and the connection error handler are mutually exclusive in
+        // practice, but guard anyway so unregister + completion run exactly once.
+        let lock = NSLock()
+        var done = false
         let finishUnregister: () -> Void = { [weak self] in
+            lock.lock()
+            if done { lock.unlock(); return }
+            done = true
+            lock.unlock()
+
             guard let self else { completion(false, "Client deallocated."); return }
             self.connection?.invalidate()
             self.connection = nil
