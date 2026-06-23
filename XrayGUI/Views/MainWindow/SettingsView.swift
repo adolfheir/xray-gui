@@ -55,7 +55,7 @@ struct SettingsView: View {
     }
 
     private var xrayCoreSection: some View {
-        Section("Xray Core".localized) {
+        Section {
             // Path gets a full-width row of its own so long paths aren't cramped.
             // Monospaced + single line; hover shows the full path.
             TextField("Binary path".localized, text: $xrayPath)
@@ -67,11 +67,21 @@ struct SettingsView: View {
                     XrayCoreManager.shared.xrayBinaryPath = newValue
                 }
 
-            // Actions + live status on one row.
+            // All actions + download progress + live status on a single row.
             HStack(spacing: 8) {
                 Button("Browse…".localized) { browseForXrayBinary() }
                 Button("Test".localized) { testXrayBinary() }
                     .disabled(!xrayBinaryExists)
+                Button("Download from GitHub".localized) { downloadXrayBinary() }
+                    .disabled(isDownloadingCore)
+                if isDownloadingCore {
+                    ProgressView(value: downloadProgress)
+                        .frame(width: 80)
+                    Text("\(Int(downloadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
                 Spacer()
                 Label {
                     Text((xrayBinaryExists ? "Binary found" : "Binary not found at this path").localized)
@@ -82,25 +92,10 @@ struct SettingsView: View {
                 .foregroundStyle(xrayBinaryExists ? .green : .red)
                 .labelStyle(.titleAndIcon)
             }
-
-            // Auto-download row.
-            HStack(spacing: 8) {
-                Button("Download from GitHub".localized) { downloadXrayBinary() }
-                    .disabled(isDownloadingCore)
-                if isDownloadingCore {
-                    ProgressView(value: downloadProgress)
-                        .frame(width: 120)
-                    Text("\(Int(downloadProgress * 100))%")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                Spacer()
-            }
-
+        } header: {
+            Text("Xray Core".localized)
+        } footer: {
             Text("Downloads the latest Xray-core release for your Mac and installs it automatically.".localized)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -220,48 +215,49 @@ struct SettingsView: View {
     // MARK: - TUN Mode
 
     private var tunSection: some View {
-        Section("TUN Mode".localized) {
+        Section {
+            // Path + its actions (browse / download + progress) on one row.
             HStack(spacing: 8) {
                 TextField("tun2socks path".localized, text: $tun2socksPath)
                     .textFieldStyle(.roundedBorder)
+                    .font(.system(.callout, design: .monospaced))
+                    .lineLimit(1)
+                    .help(tun2socksPath.isEmpty ? "tun2socks path".localized : tun2socksPath)
                     .onChange(of: tun2socksPath) { newValue in
                         TunManager.shared.tun2socksPath = newValue
                     }
                 Button("Browse…".localized) { browseForTun2socks() }
-            }
-
-            Text("TUN mode requires a tun2socks binary and the signed privileged helper to route all traffic through the proxy.".localized)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            // Auto-download row, mirroring the Xray-core section.
-            HStack(spacing: 8) {
                 Button("Download from GitHub".localized) { downloadTun2socks() }
                     .disabled(isDownloadingTun2socks)
                 if isDownloadingTun2socks {
                     ProgressView(value: tun2socksDownloadProgress)
-                        .frame(width: 120)
+                        .frame(width: 80)
                     Text("\(Int(tun2socksDownloadProgress * 100))%")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Spacer()
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: helperInstalled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    .foregroundStyle(helperInstalled ? .green : .orange)
-                Text((helperInstalled ? "Helper installed" : "Helper not installed").localized)
-                    .font(.caption)
-                    .foregroundStyle(helperInstalled ? .green : .orange)
-            }
-
-            HStack {
+            // Helper actions + live status on one row.
+            HStack(spacing: 8) {
                 Button("Install Helper".localized) { installHelper() }
                 Button("Uninstall Helper".localized) { uninstallHelper() }
                     .disabled(!helperInstalled)
+                Spacer()
+                Label {
+                    Text((helperInstalled ? "Helper installed" : "Helper not installed").localized)
+                } icon: {
+                    Image(systemName: helperInstalled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                }
+                .font(.caption)
+                .foregroundStyle(helperInstalled ? .green : .orange)
+                .labelStyle(.titleAndIcon)
             }
+        } header: {
+            Text("TUN Mode".localized)
+        } footer: {
+            Text("TUN mode requires a tun2socks binary and the signed privileged helper to route all traffic through the proxy.".localized)
         }
     }
 

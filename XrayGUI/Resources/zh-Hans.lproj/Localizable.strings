@@ -260,3 +260,19 @@
 /* MARK: - 路由规则增强 */
 "Drag to reorder rules." = "拖动可重新排序规则。";
 "Tap to add a common matcher" = "点击添加常用匹配项";
+
+/* MARK: - 配置（保存生成配置 / 检视） */
+"Add Profile" = "添加配置";
+"Save current config" = "保存当前配置";
+"Save the generated config of the selected node as a profile." = "将所选节点生成的配置保存为一个配置文件。";
+"Save as Profile" = "保存为配置";
+"Save the generated config as a profile." = "将生成的配置保存为一个配置文件。";
+"Saved profile \"%@\"" = "已保存配置 “%@”";
+"Inspect" = "查看详情";
+"Outbounds" = "出站";
+"Inbounds" = "入站";
+"DNS" = "DNS";
+"Balancer" = "负载均衡";
+"Unsupported" = "不支持";
+"nodes" = "个节点";
+"outbounds" = "个出站";

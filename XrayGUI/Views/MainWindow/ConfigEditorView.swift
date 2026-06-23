@@ -73,6 +73,14 @@ struct ConfigEditorView: View {
 
                 if isGenerated {
                     Button {
+                        appState.saveGeneratedConfigAsProfile()
+                    } label: {
+                        Label("Save as Profile".localized, systemImage: "doc.badge.plus")
+                    }
+                    .help("Save the generated config as a profile.".localized)
+                    .disabled(!appState.canSnapshotGeneratedConfig)
+
+                    Button {
                         exportGenerated()
                     } label: {
                         Label("Export".localized, systemImage: "square.and.arrow.up")

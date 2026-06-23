@@ -234,3 +234,167 @@ struct AddProfileSheet: View {
         dismiss()
     }
 }
+
+// MARK: - Read-only inspector
+
+/// A read-only breakdown of a profile's raw JSON: its inbounds, outbounds (reverse-mapped
+/// to nodes), routing rules and DNS. It never edits the source file — it only projects the
+/// config so a merged/custom profile is browsable like the rest of the app.
+struct ProfileInspectorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let profileName: String
+    let inspected: ProfileInspector.Inspected
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profileName).font(.headline).lineLimit(1)
+                    Text(inspected.headline)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Button("Done".localized) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    outboundsSection
+                    inboundsSection
+                    routingSection
+                    dnsSection
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(width: 520, height: 560)
+    }
+
+    @ViewBuilder
+    private var outboundsSection: some View {
+        if !inspected.outbounds.isEmpty {
+            Card("Outbounds", systemImage: "arrow.up.forward") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(inspected.outbounds) { outbound in
+                        switch outbound {
+                        case .node(let node):
+                            InspectedNodeRow(node: node)
+                        case .plain(_, let tag, let proto):
+                            HStack(spacing: 8) {
+                                Badge(text: proto, color: .secondary)
+                                Text(tag ?? proto)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var inboundsSection: some View {
+        if !inspected.inbounds.isEmpty {
+            Card("Inbounds", systemImage: "arrow.down.forward") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(inspected.inbounds) { inbound in
+                        HStack(spacing: 8) {
+                            Badge(text: inbound.proto, color: .accentColor)
+                            Text([inbound.listen, inbound.port].compactMap { $0 }.joined(separator: ":"))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                            if let tag = inbound.tag {
+                                Text(tag).font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var routingSection: some View {
+        if !inspected.rules.isEmpty || inspected.domainStrategy != nil || !inspected.balancers.isEmpty {
+            Card("Routing", systemImage: "arrow.triangle.branch") {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let strategy = inspected.domainStrategy {
+                        labeledLine("Domain Strategy".localized, strategy)
+                    }
+                    if !inspected.balancers.isEmpty {
+                        labeledLine("Balancer".localized, inspected.balancers.joined(separator: ", "))
+                    }
+                    if inspected.hasObservatory {
+                        labeledLine("Health Check".localized, "Enabled".localized)
+                    }
+                    ForEach(inspected.rules) { rule in
+                        HStack(alignment: .top, spacing: 8) {
+                            Badge(text: rule.target, color: .blue)
+                            Text(rule.matcher)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dnsSection: some View {
+        if !inspected.dnsServers.isEmpty {
+            Card("DNS", systemImage: "globe") {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(inspected.dnsServers.enumerated()), id: \.offset) { _, server in
+                        Text(server)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func labeledLine(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 6) {
+            Text(label + ":").font(.caption.weight(.semibold))
+            Text(value).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A compact, non-interactive node row used inside the profile inspector. Unlike
+/// `NodeRow` it carries no selection/test/delete actions — the inspected node is a
+/// projection of the raw config, not a managed node.
+struct InspectedNodeRow: View {
+    let node: ProxyNode
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Badge(text: node.protocolType.displayName, color: .accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(node.name).font(.caption.weight(.semibold))
+                    if !node.supportedByXray {
+                        Badge(text: "Unsupported".localized, color: .orange)
+                    }
+                }
+                Text(node.summary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}

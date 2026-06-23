@@ -260,3 +260,19 @@
 /* MARK: - Routing rule enhancements */
 "Drag to reorder rules." = "Drag to reorder rules.";
 "Tap to add a common matcher" = "Tap to add a common matcher";
+
+/* MARK: - Profiles (save generated config / inspector) */
+"Add Profile" = "Add Profile";
+"Save current config" = "Save current config";
+"Save the generated config of the selected node as a profile." = "Save the generated config of the selected node as a profile.";
+"Save as Profile" = "Save as Profile";
+"Save the generated config as a profile." = "Save the generated config as a profile.";
+"Saved profile \"%@\"" = "Saved profile \"%@\"";
+"Inspect" = "Inspect";
+"Outbounds" = "Outbounds";
+"Inbounds" = "Inbounds";
+"DNS" = "DNS";
+"Balancer" = "Balancer";
+"Unsupported" = "Unsupported";
+"nodes" = "nodes";
+"outbounds" = "outbounds";
