@@ -17,6 +17,31 @@ A native macOS menu-bar client for [Xray-core](https://github.com/XTLS/Xray-core
 - **Raw profiles** — power users can still point at hand-written JSON configs and edit/validate them in the built-in config editor.
 - **Quality of life** — Launch at Login (`SMAppService`), update check against GitHub Releases, runtime language switch (System / English / 简体中文), filterable live logs.
 
+## Install (from a Release)
+
+1. Download `XrayGUI-<version>-macOS.zip` from the [Releases](https://github.com/adolfheir/xray-gui/releases) page and unzip it.
+2. Move **`XrayGUI.app`** into `/Applications`.
+3. **First launch — clear the Gatekeeper block.** The app is not notarized (no paid Apple Developer ID), so macOS refuses it with *"XrayGUI is damaged or can't be opened"* — especially on Apple Silicon, which requires every arm64 binary to carry at least an ad-hoc signature. Run these two commands once:
+
+   ```bash
+   # remove the "downloaded from the internet" quarantine
+   xattr -cr /Applications/XrayGUI.app
+   # ad-hoc re-sign the app + embedded helper so Apple Silicon will run it
+   codesign --force --deep --sign - /Applications/XrayGUI.app
+   ```
+
+   Then open it normally (or right-click → **Open**). The icon appears in the **menu bar** — the app has no Dock window by design.
+4. **Point it at an Xray binary.** XrayGUI does not bundle the core. Download `xray` for macOS from [XTLS/Xray-core releases](https://github.com/XTLS/Xray-core/releases) (`darwin-arm64` for Apple Silicon, `darwin-amd64` for Intel), unzip it, then in **Settings → Xray Core** browse to the `xray` executable and click **Test** to confirm.
+5. **Add nodes and connect.** Open the menu-bar icon → **Open Main Window**:
+   - **Subscriptions** tab → add your subscription URL (auto-fetches nodes), or
+   - **Nodes** tab → **Import from Clipboard** to paste `vmess:// / vless:// / trojan:// / ss://` links.
+   - **Overview** tab → pick a node, choose **System Proxy** mode, and click **Start**.
+   - Optionally set split routing in the **Routing** tab (e.g. *Bypass Mainland China*).
+
+> **Notes**
+> - `System Proxy` and `Manual` modes work with the unsigned release. **TUN** mode additionally needs a Developer ID–signed build *and* a `tun2socks` binary path (Settings → TUN), so it is not available in the unsigned download.
+> - macOS may still show a Gatekeeper prompt the very first time — choose **Open**. If you re-download a new version, run the two commands again on the new copy.
+
 ## Requirements
 
 - macOS 13.0 or later
