@@ -128,6 +128,9 @@
 "Failed to extract the downloaded archive." = "解压下载的压缩包失败。";
 "The downloaded archive did not contain an xray binary." = "下载的压缩包中不包含 xray 可执行文件。";
 "Download failed from GitHub and all mirrors." = "从 GitHub 及所有镜像源下载均失败。";
+"Installed tun2socks %@" = "已安装 tun2socks %@";
+"No tun2socks download is available for this Mac." = "没有适用于本机的 tun2socks 下载。";
+"The downloaded archive did not contain a tun2socks binary." = "下载的压缩包中不包含 tun2socks 可执行文件。";
 "System Proxy Ports" = "系统代理端口";
 "HTTP Proxy Port" = "HTTP 代理端口";
 "SOCKS5 Proxy Port" = "SOCKS5 代理端口";

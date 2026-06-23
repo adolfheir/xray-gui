@@ -128,6 +128,9 @@
 "Failed to extract the downloaded archive." = "Failed to extract the downloaded archive.";
 "The downloaded archive did not contain an xray binary." = "The downloaded archive did not contain an xray binary.";
 "Download failed from GitHub and all mirrors." = "Download failed from GitHub and all mirrors.";
+"Installed tun2socks %@" = "Installed tun2socks %@";
+"No tun2socks download is available for this Mac." = "No tun2socks download is available for this Mac.";
+"The downloaded archive did not contain a tun2socks binary." = "The downloaded archive did not contain a tun2socks binary.";
 "System Proxy Ports" = "System Proxy Ports";
 "HTTP Proxy Port" = "HTTP Proxy Port";
 "SOCKS5 Proxy Port" = "SOCKS5 Proxy Port";

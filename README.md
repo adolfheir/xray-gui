@@ -12,8 +12,9 @@ A native macOS menu-bar client for [Xray-core](https://github.com/XTLS/Xray-core
   - **TUN** — full-device routing via a privileged helper + a `tun2socks` bridge (split-default routes, server-IP pinning to avoid loops, DNS override, clean teardown).
   - **Manual** — run Xray only; configure your apps yourself.
 - **Routing** — presets (Global / Bypass Mainland China / Direct / Custom) plus an editable custom-rule table (domain/IP/port/network → proxy/direct/block), `geoip`/`geosite` support, LAN bypass, ad-blocking, and split DNS.
-- **Latency testing** — TCP ping per node, "Ping All", and sort-by-latency, with colour-coded badges.
+- **Latency & speed testing** — per-node **real through-proxy** measurement: each test spins up a throwaway Xray instance for that node and probes end-to-end, so the number reflects the node actually working (not just a TCP handshake to its IP). "Ping All" (bounded concurrency) + sort-by-latency, plus an on-demand **download-speed test** (Mbps) per node, all colour-coded.
 - **Live traffic** — real-time up/down speed and totals via Xray's stats API (`xray api statsquery`).
+- **One-click core download** — fetch the matching `xray-core` (and a `tun2socks` bridge) straight from GitHub releases in **Settings**, no manual download/unzip.
 - **Raw profiles** — power users can still point at hand-written JSON configs and edit/validate them in the built-in config editor.
 - **Quality of life** — Launch at Login (`SMAppService`), update check against GitHub Releases, runtime language switch (System / English / 简体中文), filterable live logs.
 
@@ -31,7 +32,7 @@ A native macOS menu-bar client for [Xray-core](https://github.com/XTLS/Xray-core
    ```
 
    Then open it normally (or right-click → **Open**). The icon appears in the **menu bar** — the app has no Dock window by design.
-4. **Point it at an Xray binary.** XrayGUI does not bundle the core. Download `xray` for macOS from [XTLS/Xray-core releases](https://github.com/XTLS/Xray-core/releases) (`darwin-arm64` for Apple Silicon, `darwin-amd64` for Intel), unzip it, then in **Settings → Xray Core** browse to the `xray` executable and click **Test** to confirm.
+4. **Get an Xray binary.** XrayGUI does not bundle the core. Easiest: **Settings → Xray Core → Download from GitHub** fetches the matching build and installs it automatically. (Manual alternative: download `xray` for macOS from [XTLS/Xray-core releases](https://github.com/XTLS/Xray-core/releases) — `darwin-arm64` for Apple Silicon, `darwin-amd64` for Intel — unzip, then browse to the `xray` executable and click **Test**.)
 5. **Add nodes and connect.** Open the menu-bar icon → **Open Main Window**:
    - **Subscriptions** tab → add your subscription URL (auto-fetches nodes), or
    - **Nodes** tab → **Import from Clipboard** to paste `vmess:// / vless:// / trojan:// / ss://` links.
@@ -39,7 +40,7 @@ A native macOS menu-bar client for [Xray-core](https://github.com/XTLS/Xray-core
    - Optionally set split routing in the **Routing** tab (e.g. *Bypass Mainland China*).
 
 > **Notes**
-> - `System Proxy` and `Manual` modes work with the unsigned release. **TUN** mode additionally needs a Developer ID–signed build *and* a `tun2socks` binary path (Settings → TUN), so it is not available in the unsigned download.
+> - `System Proxy` and `Manual` modes work with the unsigned release. **TUN mode does NOT work on the unsigned download** — it needs a root privileged helper, and modern macOS (AMFI + Background Task Management) refuses to launch an ad-hoc-signed privileged daemon via *any* mechanism (`SMAppService`, the legacy `SMJobBless`, or even a manually-`launchctl`-bootstrapped LaunchDaemon — the daemon is killed and its files removed, even after a reboot). TUN therefore requires a **Developer ID–signed build** plus a `tun2socks` binary (Settings → TUN). The helper code is already wired for `SMAppService`, so a signed build needs no code changes.
 > - macOS may still show a Gatekeeper prompt the very first time — choose **Open**. If you re-download a new version, run the two commands again on the new copy.
 
 ## Requirements
@@ -74,11 +75,11 @@ Sets HTTP/HTTPS/SOCKS proxies on all network services to `127.0.0.1` at the conf
 
 TUN routes the whole device through Xray. It requires:
 
-1. A **code-signed** app + helper (Developer ID) whose `SMPrivilegedExecutables` / `SMAuthorizedClients` designated requirements match.
-2. The privileged helper installed (Settings → TUN → **Install Helper**, via `SMJobBless`).
-3. A **tun2socks** binary path set in Settings.
+1. A **Developer ID–signed** app + helper. macOS enforces code signing on privileged daemons; an ad-hoc/unsigned helper is rejected by AMFI/BTM and will not launch (see the install Notes above). This is a hard platform requirement, not a config option.
+2. The privileged helper installed (Settings → TUN → **Install Helper**, registered via `SMAppService`, macOS 13+).
+3. A **tun2socks** binary — set its path in Settings, or fetch it via **Download from GitHub**.
 
-The helper launches tun2socks (which creates the utun), configures split-default routes, pins the proxy server IP(s) to the original gateway to avoid a routing loop, overrides DNS, and tears everything down cleanly on stop. On unsigned dev builds, helper install reports a clear "requires code signing" message; System Proxy and Manual modes work without signing.
+The helper launches tun2socks (which creates the utun), configures split-default routes, pins the proxy server IP(s) to the original gateway to avoid a routing loop, overrides DNS, and tears everything down cleanly on stop. On unsigned builds, **Install Helper** registers the job but launchd refuses to start it (code-signing wall); System Proxy and Manual modes work without signing.
 
 ## Architecture
 
@@ -95,13 +96,18 @@ xray-gui/
 │   │   ├── ShareLink/ShareLinkParser.swift   # all share-link formats → ProxyNode
 │   │   ├── ConfigBuilder.swift               # ProxyNode + settings → Xray JSON
 │   │   ├── SubscriptionManager.swift         # fetch + decode + parse
-│   │   ├── LatencyTester.swift               # TCP ping / URL test
+│   │   ├── LatencyTester.swift               # TCP ping / URL latency / download-speed
+│   │   ├── NodeLatencyProbe.swift            # throwaway-instance real through-proxy probe
 │   │   ├── TrafficStatsManager.swift         # xray api stats polling
+│   │   ├── XrayCoreDownloader.swift          # fetch xray-core + geo data from GitHub
+│   │   ├── Tun2socksDownloader.swift         # fetch tun2socks bridge from GitHub
 │   │   ├── UpdateChecker.swift               # GitHub Releases
-│   │   ├── LaunchAtLogin.swift               # SMAppService
+│   │   ├── LaunchAtLogin.swift               # SMAppService (login item)
 │   │   ├── XrayCoreManager.swift             # process lifecycle + crash-restart
 │   │   ├── SystemProxyManager.swift          # networksetup + bypass
-│   │   ├── HelperClient.swift                # XPC client + SMJobBless install
+│   │   ├── SystemProxyGuard.swift            # restore proxy if changed externally
+│   │   ├── NetworkMonitor.swift / PowerEventMonitor.swift  # reconnect on net/sleep
+│   │   ├── HelperClient.swift                # XPC client + SMAppService daemon install
 │   │   └── TunManager.swift                  # TUN orchestration (server-IP resolve)
 │   ├── Support/Localization.swift            # runtime language switching
 │   ├── Resources/{en,zh-Hans}.lproj/         # Localizable.strings

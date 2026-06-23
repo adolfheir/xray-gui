@@ -24,6 +24,10 @@ struct SettingsView: View {
     @State private var isDownloadingCore = false
     @State private var downloadProgress: Double = 0
 
+    // Live state for the tun2socks "Download" action.
+    @State private var isDownloadingTun2socks = false
+    @State private var tun2socksDownloadProgress: Double = 0
+
     private let logLevels = ["debug", "info", "warning", "error", "none"]
 
     var body: some View {
@@ -230,6 +234,21 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            // Auto-download row, mirroring the Xray-core section.
+            HStack(spacing: 8) {
+                Button("Download from GitHub".localized) { downloadTun2socks() }
+                    .disabled(isDownloadingTun2socks)
+                if isDownloadingTun2socks {
+                    ProgressView(value: tun2socksDownloadProgress)
+                        .frame(width: 120)
+                    Text("\(Int(tun2socksDownloadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Spacer()
+            }
+
             HStack(spacing: 6) {
                 Image(systemName: helperInstalled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
                     .foregroundStyle(helperInstalled ? .green : .orange)
@@ -250,6 +269,29 @@ struct SettingsView: View {
         if let path = chooseFile() {
             tun2socksPath = path
             TunManager.shared.tun2socksPath = path
+        }
+    }
+
+    private func downloadTun2socks() {
+        isDownloadingTun2socks = true
+        tun2socksDownloadProgress = 0
+        Task {
+            do {
+                let result = try await Tun2socksDownloader.installLatest { fraction in
+                    Task { @MainActor in tun2socksDownloadProgress = fraction }
+                }
+                await MainActor.run {
+                    tun2socksPath = result.path
+                    TunManager.shared.tun2socksPath = result.path
+                    appState.infoMessage = "Installed tun2socks %@".localized(result.version)
+                    isDownloadingTun2socks = false
+                }
+            } catch {
+                await MainActor.run {
+                    appState.errorMessage = error.localizedDescription
+                    isDownloadingTun2socks = false
+                }
+            }
         }
     }
 
