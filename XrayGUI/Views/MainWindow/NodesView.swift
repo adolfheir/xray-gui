@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// The "Nodes" tab of the main window: lists every proxy node grouped by its
 /// originating subscription (plus a "Manual" section), with import / ping / sort

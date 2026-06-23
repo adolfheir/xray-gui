@@ -112,7 +112,7 @@ final class SubscriptionManager {
         guard let http = response as? HTTPURLResponse else {
             throw SubError.httpStatus(0)
         }
-        guard (200...299).contains(http.statusCode) else {
+        guard (200 ... 299).contains(http.statusCode) else {
             throw SubError.httpStatus(http.statusCode)
         }
 

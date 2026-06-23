@@ -1,6 +1,6 @@
 import Foundation
-import ServiceManagement
 import Security
+import ServiceManagement
 
 /// App-side client for the privileged helper. Manages the XPC connection, installs
 /// the helper via `SMJobBless`, and forwards TUN start/stop calls.
@@ -22,10 +22,9 @@ final class HelperClient {
             conn.resume()
             connection = conn
         }
-        let remote = connection?.remoteObjectProxyWithErrorHandler { err in
+        return connection?.remoteObjectProxyWithErrorHandler { err in
             onError(false, "Helper connection error: \(err.localizedDescription). Is the helper installed?")
         } as? XrayHelperProtocol
-        return remote
     }
 
     /// Whether the helper appears installed (binary present on disk).

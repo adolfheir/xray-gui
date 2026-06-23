@@ -394,7 +394,7 @@ enum ConfigBuilder {
             case "grpc":
                 stream["grpcSettings"] = [
                     "serviceName": nonEmpty(node.serviceName) ?? nonEmpty(node.path) ?? "",
-                    "multiMode": (node.grpcMode == "multi")
+                    "multiMode": node.grpcMode == "multi"
                 ]
 
             case "http":
@@ -577,7 +577,7 @@ enum ConfigBuilder {
     /// Inserts a value into `dict` under `key` only when the value is meaningfully
     /// present: nil values are skipped, as are empty strings, arrays, and dictionaries.
     private static func insertIfPresent(_ dict: inout [String: Any], _ key: String, _ value: Any?) {
-        guard let value = value else { return }
+        guard let value else { return }
         if let string = value as? String, string.isEmpty { return }
         if let array = value as? [Any], array.isEmpty { return }
         if let map = value as? [String: Any], map.isEmpty { return }
@@ -587,7 +587,7 @@ enum ConfigBuilder {
     /// Splits a comma/space-separated CSV string into trimmed, non-empty components.
     /// Returns an empty array for nil/blank input.
     private static func split(_ csv: String?) -> [String] {
-        guard let csv = csv else { return [] }
+        guard let csv else { return [] }
         return csv
             .split(whereSeparator: { $0 == "," || $0 == " " })
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -596,7 +596,7 @@ enum ConfigBuilder {
 
     /// Returns the trimmed string if it is non-empty, otherwise nil.
     private static func nonEmpty(_ value: String?) -> String? {
-        guard let value = value else { return nil }
+        guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? nil : trimmed
     }

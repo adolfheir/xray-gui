@@ -36,7 +36,7 @@ enum LatencyTester {
     static func tcpPing(host: String, port: Int, timeout: TimeInterval = 5) async -> Int? {
         // Validate the port up-front; NWEndpoint.Port rejects out-of-range values.
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(exactly: port) ?? 0),
-              port > 0, port <= 65_535 else {
+              port > 0, port <= 65535 else {
             return nil
         }
 
@@ -114,7 +114,7 @@ enum LatencyTester {
         testURL: URL = URL(string: "http://www.gstatic.com/generate_204")!,
         timeout: TimeInterval = 8
     ) async -> Int? {
-        guard socksPort > 0, socksPort <= 65_535 else { return nil }
+        guard socksPort > 0, socksPort <= 65535 else { return nil }
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
@@ -146,7 +146,7 @@ enum LatencyTester {
                 return nil
             }
             // Accept any 2xx or 3xx status as a successful connectivity check.
-            guard (200...399).contains(http.statusCode) else {
+            guard (200 ... 399).contains(http.statusCode) else {
                 return nil
             }
             return ms

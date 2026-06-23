@@ -27,7 +27,7 @@ enum ShareLinkParser {
         guard !trimmed.isEmpty else { return nil }
 
         guard let schemeRange = trimmed.range(of: "://") else { return nil }
-        let scheme = trimmed[trimmed.startIndex..<schemeRange.lowerBound].lowercased()
+        let scheme = trimmed[trimmed.startIndex ..< schemeRange.lowerBound].lowercased()
 
         var node: ProxyNode?
         switch scheme {
@@ -97,7 +97,7 @@ enum ShareLinkParser {
 
         // Map URL-safe alphabet to standard.
         cleaned = cleaned.replacingOccurrences(of: "-", with: "+")
-                         .replacingOccurrences(of: "_", with: "/")
+            .replacingOccurrences(of: "_", with: "/")
 
         // Pad to a multiple of 4.
         let remainder = cleaned.count % 4
@@ -166,10 +166,10 @@ enum ShareLinkParser {
         // TLS field can be "tls", "reality", "", or "none".
         let tlsRaw = stringValue(dict["tls"]).lowercased()
         switch tlsRaw {
-        case "tls":     node.security = "tls"
+        case "tls": node.security = "tls"
         case "reality": node.security = "reality"
-        case "xtls":    node.security = "xtls"
-        default:        node.security = "none"
+        case "xtls": node.security = "xtls"
+        default: node.security = "none"
         }
 
         node.sni = nonEmptyOrNil(stringValue(dict["sni"]))
@@ -289,7 +289,7 @@ enum ShareLinkParser {
             port: finalPort
         )
         node.method = method
-        node.encryption = method   // mirror method into encryption
+        node.encryption = method // mirror method into encryption
         node.password = password
         return node
     }
@@ -618,12 +618,12 @@ enum ShareLinkParser {
         // Bracketed IPv6: [addr] or [addr]:port
         if s.hasPrefix("[") {
             guard let close = s.firstIndex(of: "]") else { return nil }
-            let host = String(s[s.index(after: s.startIndex)..<close])
+            let host = String(s[s.index(after: s.startIndex) ..< close])
             guard !host.isEmpty else { return nil }
             let afterClose = s[s.index(after: close)...]
             if afterClose.hasPrefix(":") {
                 let portStr = String(afterClose.dropFirst())
-                guard let port = Int(portStr), (1...65535).contains(port) else { return nil }
+                guard let port = Int(portStr), (1 ... 65535).contains(port) else { return nil }
                 return HostPort(host: host, port: port, hadExplicitPort: true)
             }
             return HostPort(host: host, port: 443, hadExplicitPort: false)
@@ -635,7 +635,7 @@ enum ShareLinkParser {
         if colonCount == 1, let colon = s.lastIndex(of: ":") {
             let host = String(s[..<colon])
             let portStr = String(s[s.index(after: colon)...])
-            guard !host.isEmpty, let port = Int(portStr), (1...65535).contains(port) else {
+            guard !host.isEmpty, let port = Int(portStr), (1 ... 65535).contains(port) else {
                 return nil
             }
             return HostPort(host: host, port: port, hadExplicitPort: true)
@@ -728,7 +728,7 @@ enum ShareLinkParser {
 
     /// Return `nil` for empty/whitespace-only strings, otherwise the trimmed-of-nothing original.
     private static func nonEmptyOrNil(_ s: String?) -> String? {
-        guard let s = s, !s.isEmpty else { return nil }
+        guard let s, !s.isEmpty else { return nil }
         return s
     }
 

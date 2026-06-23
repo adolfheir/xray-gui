@@ -85,7 +85,7 @@ enum UpdateChecker {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let http = response as? HTTPURLResponse,
-              (200...299).contains(http.statusCode) else {
+              (200 ... 299).contains(http.statusCode) else {
             throw UpdateError.badResponse
         }
 
@@ -114,7 +114,7 @@ enum UpdateChecker {
         let localParts = versionComponents(local)
         let count = max(remoteParts.count, localParts.count)
 
-        for index in 0..<count {
+        for index in 0 ..< count {
             let r = index < remoteParts.count ? remoteParts[index] : 0
             let l = index < localParts.count ? localParts[index] : 0
             if r != l {

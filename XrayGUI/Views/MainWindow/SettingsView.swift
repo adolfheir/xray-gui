@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// The app's settings screen: Xray-core binary, local inbounds, TUN mode + privileged
@@ -136,7 +136,6 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder
     private func portRow(label: String, value: Binding<Int>, onChange: (() -> Void)? = nil) -> some View {
         HStack {
             Text(label)
@@ -146,7 +145,7 @@ struct SettingsView: View {
                 .multilineTextAlignment(.trailing)
                 .frame(width: 80)
                 .onChange(of: value.wrappedValue) { _ in onChange?() }
-            Stepper("", value: value, in: 0...65535)
+            Stepper("", value: value, in: 0 ... 65535)
                 .labelsHidden()
         }
     }

@@ -108,7 +108,7 @@ final class XrayCoreManager {
 
         proc.terminationHandler = { [weak self] p in
             guard let self else { return }
-            self.stateQueue.async { self.handleTerminationLocked(process: p, exitCode: p.terminationStatus) }
+            stateQueue.async { self.handleTerminationLocked(process: p, exitCode: p.terminationStatus) }
         }
 
         try proc.run()
@@ -150,7 +150,7 @@ final class XrayCoreManager {
             return
         }
 
-        let delay = pow(2.0, Double(restartCount - 1))   // 1s / 2s / 4s / 8s
+        let delay = pow(2.0, Double(restartCount - 1)) // 1s / 2s / 4s / 8s
         Task { @MainActor in
             AppState.shared.addLog("Restarting in \(Int(delay))s (attempt \(self.restartCount)/\(self.maxRestartCount))...", level: .warning)
         }
@@ -158,10 +158,10 @@ final class XrayCoreManager {
         // Cancellable so a user-initiated stop() can abort a pending restart.
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.stateQueue.async {
+            stateQueue.async {
                 guard self.shouldKeepAlive else { return }
                 self.pendingRestart = nil
-                _ = configPath   // captured for clarity; AppState re-reads its own selection
+                _ = configPath // captured for clarity; AppState re-reads its own selection
                 Task { @MainActor in AppState.shared.handleCoreCrashRestart() }
             }
         }

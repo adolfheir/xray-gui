@@ -10,12 +10,12 @@ enum ProxyProtocol: String, Codable, CaseIterable, Hashable {
     case vmess
     case vless
     case trojan
-    case shadowsocks    // ss://  and Shadowsocks-2022
+    case shadowsocks // ss://  and Shadowsocks-2022
     case socks
     case http
-    case ssr            // ShadowsocksR — parsed but NOT supported by Xray-core
-    case hysteria2      // hy2://  — parsed but NOT supported by Xray-core
-    case tuic           // tuic:// — parsed but NOT supported by Xray-core
+    case ssr // ShadowsocksR — parsed but NOT supported by Xray-core
+    case hysteria2 // hy2://  — parsed but NOT supported by Xray-core
+    case tuic // tuic:// — parsed but NOT supported by Xray-core
     case wireguard
 
     /// Whether Xray-core can build an outbound for this protocol.

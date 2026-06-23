@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// Inspect/validate the *generated* Xray config for the selected node, and view/edit
@@ -100,7 +100,6 @@ struct ConfigEditorView: View {
         .padding(12)
     }
 
-    @ViewBuilder
     private var statusBar: some View {
         HStack(spacing: 8) {
             switch status {

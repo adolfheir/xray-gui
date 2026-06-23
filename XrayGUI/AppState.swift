@@ -1,6 +1,6 @@
-import Foundation
-import Combine
 import AppKit
+import Combine
+import Foundation
 
 enum ProxyMode: String, CaseIterable, Codable {
     case systemProxy = "System Proxy"
@@ -44,10 +44,10 @@ final class AppState: ObservableObject {
 
     // MARK: Runtime
     @Published var isRunning = false
-    @Published var isBusy = false                 // a start/stop transition is in flight
+    @Published var isBusy = false // a start/stop transition is in flight
     @Published var logs: [LogEntry] = []
     @Published var errorMessage: String?
-    @Published var infoMessage: String?           // non-error toast (e.g. "Imported 5 nodes")
+    @Published var infoMessage: String? // non-error toast (e.g. "Imported 5 nodes")
     @Published var traffic: TrafficStatsManager.Snapshot = .zero
     @Published var latency: [UUID: LatencyResult] = [:]
 

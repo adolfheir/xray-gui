@@ -1,7 +1,7 @@
 import Foundation
 
 class HelperDelegate: NSObject, NSXPCListenerDelegate {
-    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+    func listener(_: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         connection.exportedInterface = NSXPCInterface(with: XrayHelperProtocol.self)
         connection.exportedObject = Helper()
         connection.resume()
@@ -41,7 +41,7 @@ class Helper: NSObject, XrayHelperProtocol {
             // Remove the privileged helper binary and its launchd plist.
             let paths = [
                 "/Library/PrivilegedHelperTools/\(HelperMachServiceName)",
-                "/Library/LaunchDaemons/\(HelperMachServiceName).plist",
+                "/Library/LaunchDaemons/\(HelperMachServiceName).plist"
             ]
             for path in paths where fm.fileExists(atPath: path) {
                 do { try fm.removeItem(atPath: path) }
@@ -69,10 +69,10 @@ final class TunController {
     private let queue = DispatchQueue(label: "com.xraygui.helper.tun")
 
     private var process: Process?
-    private var pinnedRoutes: [String] = []          // host routes for server IPs (delete on stop)
-    private var splitRoutes: [String] = []           // 0.0.0.0/1 & 128.0.0.0/1 (delete on stop)
-    private var dnsService: String?                  // network service whose DNS we overrode
-    private var savedDNS: [String]?                  // original DNS servers to restore
+    private var pinnedRoutes: [String] = [] // host routes for server IPs (delete on stop)
+    private var splitRoutes: [String] = [] // 0.0.0.0/1 & 128.0.0.0/1 (delete on stop)
+    private var dnsService: String? // network service whose DNS we overrode
+    private var savedDNS: [String]? // original DNS servers to restore
     private var originalGateway: String?
     private var activeTunName: String?
 
@@ -108,7 +108,7 @@ final class TunController {
             proc.arguments = [
                 "-device", config.tunName,
                 "-proxy", "socks5://\(config.socksHost):\(config.socksPort)",
-                "-loglevel", config.logLevel,
+                "-loglevel", config.logLevel
             ]
             let pipe = Pipe()
             proc.standardOutput = pipe
@@ -129,7 +129,7 @@ final class TunController {
             // `process` first).
             proc.terminationHandler = { [weak self] _ in
                 guard let self else { return }
-                self.queue.async {
+                queue.async {
                     if self.process === proc { self.teardownLocked() }
                 }
             }
@@ -142,7 +142,7 @@ final class TunController {
             }
             _ = Shell.run("/sbin/ifconfig", [
                 config.tunName, config.tunAddress, config.tunAddress,
-                "netmask", config.tunMask, "up",
+                "netmask", config.tunMask, "up"
             ])
 
             // 4) Pin each resolved server IP to the original gateway to avoid a routing loop.
@@ -186,7 +186,7 @@ final class TunController {
             p.terminate()
             // Give it a moment, then force kill if needed.
             let deadline = Date().addingTimeInterval(2)
-            while p.isRunning && Date() < deadline { usleep(50_000) }
+            while p.isRunning && Date() < deadline { usleep(50000) }
             if p.isRunning { kill(p.processIdentifier, SIGKILL) }
         }
         process = nil

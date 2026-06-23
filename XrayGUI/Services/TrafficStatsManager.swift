@@ -128,7 +128,7 @@ final class TrafficStatsManager {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let stats = Self.queryTraffic(xrayPath: path, apiPort: port)
-            self.stateQueue.async {
+            stateQueue.async {
                 self.queryInFlight = false
                 guard self.polling else { return }
                 if let stats {
