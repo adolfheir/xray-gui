@@ -20,13 +20,13 @@ struct LogsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Filter logs...", text: $searchText)
+                TextField("Filter logs...".localized, text: $searchText)
                     .textFieldStyle(.plain)
 
                 Divider().frame(height: 16)
 
-                Picker("Level", selection: $filterLevel) {
-                    Text("All").tag(LogEntry.Level?.none)
+                Picker("Level".localized, selection: $filterLevel) {
+                    Text("All".localized).tag(LogEntry.Level?.none)
                     ForEach(LogEntry.Level.allCases, id: \.self) { level in
                         Text(level.rawValue.capitalized).tag(LogEntry.Level?.some(level))
                     }
@@ -36,7 +36,7 @@ struct LogsView: View {
 
                 Toggle(isOn: $autoScroll) {
                     Image(systemName: "arrow.down.to.line")
-                        .help("Auto Scroll")
+                        .help("Auto Scroll".localized)
                 }
                 .toggleStyle(.button)
                 .buttonStyle(.borderless)
@@ -45,7 +45,7 @@ struct LogsView: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
-                .help("Clear Logs")
+                .help("Clear Logs".localized)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -74,7 +74,7 @@ struct LogsView: View {
             .background(Color(nsColor: .textBackgroundColor))
             .font(.system(size: 12, design: .monospaced))
         }
-        .navigationTitle("Logs")
+        .navigationTitle("Logs".localized)
     }
 }
 

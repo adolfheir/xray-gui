@@ -18,6 +18,13 @@ targets:
     sources:
       - path: XrayGUI
       - path: Shared
+    dependencies:
+      # Build the privileged helper alongside the app and embed it at the
+      # SMJobBless-required location inside the app bundle.
+      - target: XrayHelper
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/LaunchServices
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xraygui.app
@@ -26,6 +33,7 @@ targets:
         PRODUCT_NAME: XrayGUI
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
+        SWIFT_VERSION: "5.9"
 
   XrayHelper:
     type: tool
