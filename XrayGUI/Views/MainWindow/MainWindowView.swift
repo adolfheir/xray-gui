@@ -20,7 +20,7 @@ struct MainWindowView: View {
                 Label("Settings".localized, systemImage: "gear").tag(Tab.settings)
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(180)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
         } detail: {
             Group {
                 switch selection {
@@ -33,6 +33,12 @@ struct MainWindowView: View {
                 case .settings: SettingsView()
                 }
             }
+            // Give the detail column a definite minimum width. Without it, a fully
+            // flexible detail (e.g. the Profiles empty state, which fills both axes
+            // with no intrinsic width) lets NavigationSplitView relayout the split so
+            // aggressively that the sidebar's rows stop rendering — leaving an empty
+            // sidebar the user can't navigate out of.
+            .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
             .environmentObject(appState)
         }
         .alert("Error".localized, isPresented: .init(
