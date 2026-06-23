@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Debug, Universal)
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build app + helper
+        run: |
+          xcodebuild \
+            -project XrayGUI.xcodeproj \
+            -scheme XrayGUI \
+            -configuration Debug \
+            -derivedDataPath build \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_HARDENED_RUNTIME=NO \
+            build
+
+      - name: Verify helper is embedded
+        run: |
+          APP=$(find build/Build/Products/Debug -name "XrayGUI.app" | head -1)
+          test -f "$APP/Contents/Library/LaunchServices/com.xraygui.helper" \
+            && echo "Embedded helper OK" \
+            || (echo "Helper not embedded" && exit 1)
+
+  lint:
+    name: Lint (SwiftFormat)
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+
+      - name: Run SwiftFormat (lint only)
+        run: swiftformat --lint . --reporter github-actions-log

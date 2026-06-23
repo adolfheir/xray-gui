@@ -1,0 +1,18 @@
+# SwiftFormat configuration for XrayGUI (lenient; CI lint is non-blocking).
+--swiftversion 5.9
+
+# Exclude generated and build artifacts.
+--exclude XrayGUI.xcodeproj,build,DerivedData
+
+# Keep a light touch: indentation + obvious hygiene only.
+--indent 4
+--maxwidth none
+--wraparguments preserve
+--wrapparameters preserve
+--self remove
+--trimwhitespace always
+--commas inline
+
+# Disable opinionated rules that would churn the project's chosen style
+# (compact single-line property/function bodies, explicit types/nil, tight MARKs).
+--disable redundantReturn, wrapMultilineStatementBraces, blankLinesAtStartOfScope, andOperator, wrapPropertyBodies, wrapFunctionBodies, wrapLoopBodies, blankLinesAroundMark, hoistPatternLet, redundantType, redundantNilInit, conditionalAssignment, docComments

@@ -1,84 +1,77 @@
-import SwiftUI
 import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
 
 struct ProfilesView: View {
     @EnvironmentObject var appState: AppState
     @State private var showAddSheet = false
-    @State private var newProfileName = ""
-    @State private var newProfilePath = ""
-    @State private var editingProfile: Profile?
 
     var body: some View {
         VStack(spacing: 0) {
-            if appState.profiles.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 52))
-                        .foregroundStyle(.secondary)
-                    Text("No Profiles")
-                        .font(.title2.bold())
-                    Text("Add a JSON config file to get started.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Button("Add Profile") { showAddSheet = true }
-                        .buttonStyle(.borderedProminent)
+            // Header: custom profile toggle.
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(isOn: $appState.useCustomProfile) {
+                    Text("Use custom profile".localized)
+                        .font(.headline)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .toggleStyle(.switch)
+
+                Text("When enabled, the selected raw profile is launched instead of the generated node config.".localized)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
+            if appState.profiles.isEmpty {
+                EmptyState(
+                    icon: "doc.text",
+                    title: "No Profiles",
+                    subtitle: "Add a JSON config file to get started.",
+                    actionTitle: "Add Profile",
+                    action: { showAddSheet = true }
+                )
             } else {
                 List {
                     ForEach($appState.profiles) { $profile in
-                        ProfileRow(profile: $profile,
-                                   isSelected: appState.selectedProfile?.id == profile.id,
-                                   onSelect: { appState.selectedProfileId = profile.id },
-                                   onDelete: { deleteProfile(profile) },
-                                   onOpenInEditor: { openInEditor(profile) },
-                                   onRevealInFinder: { revealInFinder(profile) })
+                        ProfileRow(profile: $profile)
                     }
                 }
                 .listStyle(.inset)
             }
         }
-        .navigationTitle("Profiles")
+        .navigationTitle("Profiles".localized)
         .toolbar {
             ToolbarItem {
                 Button(action: { showAddSheet = true }) {
-                    Label("Add Profile", systemImage: "plus")
+                    Label("Add Profile".localized, systemImage: "plus")
                 }
+                .help("Add Profile".localized)
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddProfileSheet(isPresented: $showAddSheet)
+            AddProfileSheet()
                 .environmentObject(appState)
         }
-    }
-
-    private func deleteProfile(_ profile: Profile) {
-        appState.profiles.removeAll { $0.id == profile.id }
-        if appState.selectedProfileId == profile.id {
-            appState.selectedProfileId = appState.profiles.first?.id
-        }
-    }
-
-    private func openInEditor(_ profile: Profile) {
-        NSWorkspace.shared.open(profile.configURL)
-    }
-
-    private func revealInFinder(_ profile: Profile) {
-        NSWorkspace.shared.selectFile(profile.configPath, inFileViewerRootedAtPath: "")
     }
 }
 
 struct ProfileRow: View {
+    @EnvironmentObject var appState: AppState
     @Binding var profile: Profile
-    let isSelected: Bool
-    let onSelect: () -> Void
-    let onDelete: () -> Void
-    let onOpenInEditor: () -> Void
-    let onRevealInFinder: () -> Void
+
+    private var isSelected: Bool {
+        appState.selectedProfile?.id == profile.id
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onSelect) {
+            Button(action: { appState.selectedProfileId = profile.id }) {
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
@@ -88,21 +81,19 @@ struct ProfileRow: View {
                             .foregroundStyle(isSelected ? .blue : .secondary)
                     }
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Text(profile.name)
-                                .font(.subheadline.weight(.medium))
+                                .font(.subheadline.weight(.bold))
                             if !profile.exists {
-                                Label("Missing", systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(.orange)
-                                    .labelStyle(.iconOnly)
+                                Badge(text: "Missing".localized, color: .orange)
                             }
                         }
                         Text(profile.configPath)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .truncationMode(.middle)
                     }
 
                     Spacer()
@@ -116,101 +107,99 @@ struct ProfileRow: View {
             }
             .buttonStyle(.plain)
 
-            // Action buttons
+            // Row actions.
             HStack(spacing: 4) {
-                IconButton("pencil", tooltip: "Open in Editor", action: onOpenInEditor)
-                IconButton("folder", tooltip: "Reveal in Finder", action: onRevealInFinder)
-                IconButton("trash", tooltip: "Delete", color: .red, action: onDelete)
+                IconButton("pencil", tooltip: "Open in Editor".localized) {
+                    NSWorkspace.shared.open(profile.configURL)
+                }
+                IconButton("folder", tooltip: "Reveal in Finder".localized) {
+                    NSWorkspace.shared.selectFile(profile.configPath, inFileViewerRootedAtPath: "")
+                }
+                IconButton("trash", tooltip: "Delete".localized, color: .red) {
+                    deleteProfile()
+                }
             }
         }
         .padding(.vertical, 4)
     }
-}
 
-struct IconButton: View {
-    let icon: String
-    let tooltip: String
-    let color: Color
-    let action: () -> Void
-
-    init(_ icon: String, tooltip: String, color: Color = .secondary, action: @escaping () -> Void) {
-        self.icon = icon
-        self.tooltip = tooltip
-        self.color = color
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-                .frame(width: 28, height: 28)
-                .background(Color.secondary.opacity(0.08))
-                .cornerRadius(6)
+    private func deleteProfile() {
+        let removedId = profile.id
+        appState.profiles.removeAll { $0.id == removedId }
+        if appState.selectedProfileId == removedId {
+            appState.selectedProfileId = appState.profiles.first?.id
         }
-        .buttonStyle(.plain)
-        .help(tooltip)
     }
 }
 
 struct AddProfileSheet: View {
     @EnvironmentObject var appState: AppState
-    @Binding var isPresented: Bool
+    @Environment(\.dismiss) private var dismiss
+
     @State private var name = ""
     @State private var configPath = ""
 
+    private var canAdd: Bool {
+        !configPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Text("Add Profile")
+            Text("Add Profile".localized)
                 .font(.headline)
                 .padding()
 
             Form {
-                TextField("Profile Name", text: $name)
-                    .textFieldStyle(.roundedBorder)
+                TextField("Profile Name".localized, text: $name)
 
-                HStack {
-                    TextField("Config File Path", text: $configPath)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Browse") { browseFile() }
+                HStack(spacing: 8) {
+                    TextField("Config File Path".localized, text: $configPath)
+                    Button("Browse".localized) { browseFile() }
                 }
             }
-            .padding()
+            .formStyle(.grouped)
 
             Divider()
 
             HStack {
-                Button("Cancel") { isPresented = false }
-                    .keyboardShortcut(.escape)
+                Button("Cancel".localized) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Add") {
-                    let profile = Profile(
-                        name: name.isEmpty
-                            ? URL(fileURLWithPath: configPath).deletingPathExtension().lastPathComponent
-                            : name,
-                        configPath: configPath
-                    )
-                    appState.profiles.append(profile)
-                    appState.selectedProfileId = profile.id
-                    isPresented = false
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(configPath.isEmpty)
-                .keyboardShortcut(.return)
+                Button("Add".localized) { add() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canAdd)
+                    .keyboardShortcut(.defaultAction)
             }
             .padding()
         }
-        .frame(width: 440)
+        .frame(width: 460)
     }
 
     private func browseFile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
-        panel.title = "Select Xray Config File"
-        panel.message = "Choose a JSON configuration file for Xray"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.title = "Select Xray Config File".localized
         if panel.runModal() == .OK, let url = panel.url {
             configPath = url.path
-            if name.isEmpty { name = url.deletingPathExtension().lastPathComponent }
+            if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                name = url.deletingPathExtension().lastPathComponent
+            }
         }
+    }
+
+    private func add() {
+        let trimmedPath = configPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else { return }
+        var finalName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if finalName.isEmpty {
+            finalName = URL(fileURLWithPath: trimmedPath).deletingPathExtension().lastPathComponent
+        }
+        let profile = Profile(name: finalName, configPath: trimmedPath)
+        appState.profiles.append(profile)
+        appState.selectedProfileId = profile.id
+        dismiss()
     }
 }

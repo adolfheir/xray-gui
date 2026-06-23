@@ -1,0 +1,174 @@
+/* XrayGUI — Simplified Chinese localization. Keys are the English source strings. */
+
+/* MARK: General */
+"Start" = "启动";
+"Stop" = "停止";
+"Running" = "运行中";
+"Stopped" = "已停止";
+"Connecting" = "连接中";
+"Cancel" = "取消";
+"Add" = "添加";
+"Delete" = "删除";
+"Edit" = "编辑";
+"Save" = "保存";
+"Close" = "关闭";
+"OK" = "好";
+"Done" = "完成";
+"Test" = "测试";
+"Browse" = "浏览";
+"Import" = "导入";
+"Export" = "导出";
+"Update" = "更新";
+"Refresh" = "刷新";
+"Copy" = "复制";
+"Settings" = "设置";
+"About" = "关于";
+"Loading…" = "加载中…";
+"Yes" = "是";
+"No" = "否";
+"Enabled" = "已启用";
+"Disabled" = "已禁用";
+"Reset" = "重置";
+"Apply" = "应用";
+"Remove" = "移除";
+"Rename" = "重命名";
+"Duplicate" = "复制副本";
+"Retry" = "重试";
+"None" = "无";
+
+/* MARK: Tabs / Navigation */
+"Overview" = "概览";
+"Profiles" = "配置";
+"Nodes" = "节点";
+"Subscriptions" = "订阅";
+"Routing" = "路由";
+"Logs" = "日志";
+"Open Main Window" = "打开主窗口";
+"Quit" = "退出";
+
+/* MARK: Modes */
+"System Proxy" = "系统代理";
+"TUN" = "TUN";
+"Manual" = "手动";
+"Proxy Mode" = "代理模式";
+"Route via HTTP/SOCKS system proxy" = "通过 HTTP/SOCKS 系统代理转发";
+"Route all traffic via TUN interface" = "通过 TUN 接口转发全部流量";
+"No proxy configuration" = "不配置代理";
+"Global" = "全局";
+"Bypass Mainland China" = "绕过中国大陆";
+"Direct" = "直连";
+"Custom" = "自定义";
+"Block" = "拦截";
+
+/* MARK: Status / Overview */
+"Status" = "状态";
+"No profile selected" = "未选择配置";
+"No node selected" = "未选择节点";
+"Select a profile first." = "请先选择一个配置。";
+"Current Node" = "当前节点";
+"Latency" = "延迟";
+"Test Latency" = "测试延迟";
+"Upload" = "上传";
+"Download" = "下载";
+"Speed" = "速度";
+"Traffic" = "流量";
+"Connection" = "连接";
+"Uptime" = "运行时长";
+
+/* MARK: Nodes / Subscriptions */
+"Add Node" = "添加节点";
+"Add Subscription" = "添加订阅";
+"Subscription URL" = "订阅地址";
+"Update All" = "全部更新";
+"No Nodes" = "暂无节点";
+"No Subscriptions" = "暂无订阅";
+"Add a subscription or import a share link to get started." = "添加订阅或导入分享链接以开始使用。";
+"Import from Clipboard" = "从剪贴板导入";
+"Paste share links (vmess://, vless://, trojan://, ss://, …)" = "粘贴分享链接（vmess://、vless://、trojan://、ss:// 等）";
+"Last updated" = "上次更新";
+"Auto Update" = "自动更新";
+"Update Interval (hours)" = "更新间隔（小时）";
+"Ping All" = "全部测速";
+"Sort by Latency" = "按延迟排序";
+"Node Name" = "节点名称";
+"Address" = "地址";
+"Protocol" = "协议";
+"Edit Node" = "编辑节点";
+"Share Link" = "分享链接";
+
+/* MARK: Routing */
+"Routing Mode" = "路由模式";
+"Bypass LAN" = "绕过局域网";
+"Block Ads" = "拦截广告";
+"Domain Strategy" = "域名策略";
+"Custom Rules" = "自定义规则";
+"Add Rule" = "添加规则";
+"Remote DNS" = "远程 DNS";
+"Direct DNS" = "直连 DNS";
+"Enable DNS" = "启用 DNS";
+"Outbound" = "出站";
+"Domains" = "域名";
+"IPs" = "IP 地址";
+"Port" = "端口";
+"Edit Rule" = "编辑规则";
+"No Rules" = "暂无规则";
+
+/* MARK: Settings */
+"Xray Core" = "Xray 内核";
+"Path to xray binary" = "Xray 可执行文件路径";
+"Binary found" = "已找到可执行文件";
+"Binary not found at this path" = "此路径下未找到可执行文件";
+"System Proxy Ports" = "系统代理端口";
+"HTTP Proxy Port" = "HTTP 代理端口";
+"SOCKS5 Proxy Port" = "SOCKS5 代理端口";
+"Make sure these match your Xray config's inbound ports." = "请确保与 Xray 配置中的入站端口一致。";
+"Listen Address" = "监听地址";
+"Local only (127.0.0.1)" = "仅本机（127.0.0.1）";
+"Allow LAN (0.0.0.0)" = "允许局域网（0.0.0.0）";
+"TUN Mode" = "TUN 模式";
+"tun2socks binary path" = "tun2socks 可执行文件路径";
+"Privileged Helper" = "特权助手";
+"Install Helper" = "安装助手";
+"Uninstall Helper" = "卸载助手";
+"Launch at Login" = "登录时启动";
+"Check for Updates" = "检查更新";
+"Sniffing" = "流量探测";
+"Mux" = "多路复用";
+"Log Level" = "日志级别";
+"General" = "通用";
+"Advanced" = "高级";
+"Language" = "语言";
+
+/* MARK: Logs */
+"Filter logs..." = "筛选日志…";
+"All" = "全部";
+"Auto Scroll" = "自动滚动";
+"Clear Logs" = "清空日志";
+"Debug" = "调试";
+"Info" = "信息";
+"Warning" = "警告";
+"Error" = "错误";
+
+/* MARK: Editor / Errors */
+"Config Editor" = "配置编辑器";
+"Invalid JSON" = "JSON 无效";
+"Config is valid" = "配置有效";
+"Validate" = "校验";
+"Profile Name" = "配置名称";
+"Config File Path" = "配置文件路径";
+"Open in Editor" = "在编辑器中打开";
+"Reveal in Finder" = "在访达中显示";
+"Missing" = "缺失";
+"Xray binary not found. Please set the path in Settings." = "未找到 Xray 可执行文件，请在设置中指定路径。";
+"Config file not found." = "未找到配置文件。";
+"Helper installed successfully." = "助手安装成功。";
+"A newer version is available" = "有可用的新版本";
+"You are up to date" = "已是最新版本";
+"Import succeeded" = "导入成功";
+"Imported %d node(s)" = "已导入 %d 个节点";
+"No valid share links found" = "未找到有效的分享链接";
+"Failed to start Xray." = "启动 Xray 失败。";
+"Failed to stop Xray." = "停止 Xray 失败。";
+"Update failed" = "更新失败";
+"Are you sure?" = "确定吗？";
+"This action cannot be undone." = "此操作无法撤销。";

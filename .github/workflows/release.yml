@@ -18,16 +18,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Install xcodegen
         run: brew install xcodegen
+
+      - name: Derive version
+        id: ver
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Inject version into Info.plist
+        run: |
+          PLIST=XrayGUI/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.ver.outputs.version }}" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST"
+          # Keep the helper version aligned for display.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.ver.outputs.version }}" XrayHelper/Info.plist || true
 
       - name: Generate Xcode project
         run: xcodegen generate
 
       - name: Build (Release, Universal)
         run: |
+          set -o pipefail
           xcodebuild \
             -project XrayGUI.xcodeproj \
             -scheme XrayGUI \
@@ -41,17 +60,23 @@ jobs:
             ENABLE_HARDENED_RUNTIME=NO \
             build
 
-      - name: Package .app → .zip
+      - name: Package .app → .zip + checksum
+        id: pkg
         run: |
           APP=$(find build/Build/Products/Release -name "XrayGUI.app" | head -1)
           echo "Found app: $APP"
+          test -n "$APP" || { echo "App not found"; exit 1; }
           mkdir -p dist
-          cp -r "$APP" dist/XrayGUI.app
+          cp -R "$APP" dist/XrayGUI.app
           cd dist
-          # Remove quarantine attribute so users can open without right-click
+          # Strip quarantine so users can open the unsigned app more easily.
           xattr -cr XrayGUI.app
-          zip -r --symlinks "XrayGUI-${{ github.ref_name }}-macOS.zip" XrayGUI.app
-          echo "Package size: $(du -sh XrayGUI-${{ github.ref_name }}-macOS.zip | cut -f1)"
+          ZIP="XrayGUI-${{ github.ref_name }}-macOS.zip"
+          zip -r --symlinks "$ZIP" XrayGUI.app
+          shasum -a 256 "$ZIP" > "$ZIP.sha256"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "Package size: $(du -sh "$ZIP" | cut -f1)"
+          cat "$ZIP.sha256"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -61,18 +86,28 @@ jobs:
             ## XrayGUI ${{ github.ref_name }}
 
             A native macOS menu bar app for [Xray-core](https://github.com/XTLS/Xray-core).
+            Universal binary (Apple Silicon + Intel).
+
+            ### Features
+            - Import nodes from share links (vmess / vless / trojan / ss / ssr / socks / http / hysteria2 / tuic) and subscriptions
+            - System Proxy, TUN (via tun2socks + privileged helper), and Manual modes
+            - Routing presets (Global / Bypass Mainland / Direct / Custom rules), split DNS
+            - Latency testing, live traffic stats, English & 简体中文 UI
 
             ### Installation
             1. Download `XrayGUI-${{ github.ref_name }}-macOS.zip`
             2. Unzip and drag `XrayGUI.app` to `/Applications`
-            3. Download Xray binary from [XTLS/Xray-core releases](https://github.com/XTLS/Xray-core/releases)
-            4. Launch XrayGUI → Settings → set Xray binary path
+            3. Download an Xray binary from [XTLS/Xray-core releases](https://github.com/XTLS/Xray-core/releases)
+            4. Launch XrayGUI → Settings → set the Xray binary path
 
-            > **Note:** App is unsigned. On first launch: right-click → Open, or run:
+            > **Note:** The app is unsigned. On first launch: right-click → Open, or run:
             > ```bash
             > xattr -cr /Applications/XrayGUI.app
             > ```
-          files: dist/*.zip
+            > TUN mode additionally requires a code-signed build, a tun2socks binary, and the privileged helper.
+          files: |
+            dist/*.zip
+            dist/*.sha256
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

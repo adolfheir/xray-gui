@@ -1,0 +1,174 @@
+/* XrayGUI — English localization. Keys are the English source strings. */
+
+/* MARK: General */
+"Start" = "Start";
+"Stop" = "Stop";
+"Running" = "Running";
+"Stopped" = "Stopped";
+"Connecting" = "Connecting";
+"Cancel" = "Cancel";
+"Add" = "Add";
+"Delete" = "Delete";
+"Edit" = "Edit";
+"Save" = "Save";
+"Close" = "Close";
+"OK" = "OK";
+"Done" = "Done";
+"Test" = "Test";
+"Browse" = "Browse";
+"Import" = "Import";
+"Export" = "Export";
+"Update" = "Update";
+"Refresh" = "Refresh";
+"Copy" = "Copy";
+"Settings" = "Settings";
+"About" = "About";
+"Loading…" = "Loading…";
+"Yes" = "Yes";
+"No" = "No";
+"Enabled" = "Enabled";
+"Disabled" = "Disabled";
+"Reset" = "Reset";
+"Apply" = "Apply";
+"Remove" = "Remove";
+"Rename" = "Rename";
+"Duplicate" = "Duplicate";
+"Retry" = "Retry";
+"None" = "None";
+
+/* MARK: Tabs / Navigation */
+"Overview" = "Overview";
+"Profiles" = "Profiles";
+"Nodes" = "Nodes";
+"Subscriptions" = "Subscriptions";
+"Routing" = "Routing";
+"Logs" = "Logs";
+"Open Main Window" = "Open Main Window";
+"Quit" = "Quit";
+
+/* MARK: Modes */
+"System Proxy" = "System Proxy";
+"TUN" = "TUN";
+"Manual" = "Manual";
+"Proxy Mode" = "Proxy Mode";
+"Route via HTTP/SOCKS system proxy" = "Route via HTTP/SOCKS system proxy";
+"Route all traffic via TUN interface" = "Route all traffic via TUN interface";
+"No proxy configuration" = "No proxy configuration";
+"Global" = "Global";
+"Bypass Mainland China" = "Bypass Mainland China";
+"Direct" = "Direct";
+"Custom" = "Custom";
+"Block" = "Block";
+
+/* MARK: Status / Overview */
+"Status" = "Status";
+"No profile selected" = "No profile selected";
+"No node selected" = "No node selected";
+"Select a profile first." = "Select a profile first.";
+"Current Node" = "Current Node";
+"Latency" = "Latency";
+"Test Latency" = "Test Latency";
+"Upload" = "Upload";
+"Download" = "Download";
+"Speed" = "Speed";
+"Traffic" = "Traffic";
+"Connection" = "Connection";
+"Uptime" = "Uptime";
+
+/* MARK: Nodes / Subscriptions */
+"Add Node" = "Add Node";
+"Add Subscription" = "Add Subscription";
+"Subscription URL" = "Subscription URL";
+"Update All" = "Update All";
+"No Nodes" = "No Nodes";
+"No Subscriptions" = "No Subscriptions";
+"Add a subscription or import a share link to get started." = "Add a subscription or import a share link to get started.";
+"Import from Clipboard" = "Import from Clipboard";
+"Paste share links (vmess://, vless://, trojan://, ss://, …)" = "Paste share links (vmess://, vless://, trojan://, ss://, …)";
+"Last updated" = "Last updated";
+"Auto Update" = "Auto Update";
+"Update Interval (hours)" = "Update Interval (hours)";
+"Ping All" = "Ping All";
+"Sort by Latency" = "Sort by Latency";
+"Node Name" = "Node Name";
+"Address" = "Address";
+"Protocol" = "Protocol";
+"Edit Node" = "Edit Node";
+"Share Link" = "Share Link";
+
+/* MARK: Routing */
+"Routing Mode" = "Routing Mode";
+"Bypass LAN" = "Bypass LAN";
+"Block Ads" = "Block Ads";
+"Domain Strategy" = "Domain Strategy";
+"Custom Rules" = "Custom Rules";
+"Add Rule" = "Add Rule";
+"Remote DNS" = "Remote DNS";
+"Direct DNS" = "Direct DNS";
+"Enable DNS" = "Enable DNS";
+"Outbound" = "Outbound";
+"Domains" = "Domains";
+"IPs" = "IPs";
+"Port" = "Port";
+"Edit Rule" = "Edit Rule";
+"No Rules" = "No Rules";
+
+/* MARK: Settings */
+"Xray Core" = "Xray Core";
+"Path to xray binary" = "Path to xray binary";
+"Binary found" = "Binary found";
+"Binary not found at this path" = "Binary not found at this path";
+"System Proxy Ports" = "System Proxy Ports";
+"HTTP Proxy Port" = "HTTP Proxy Port";
+"SOCKS5 Proxy Port" = "SOCKS5 Proxy Port";
+"Make sure these match your Xray config's inbound ports." = "Make sure these match your Xray config's inbound ports.";
+"Listen Address" = "Listen Address";
+"Local only (127.0.0.1)" = "Local only (127.0.0.1)";
+"Allow LAN (0.0.0.0)" = "Allow LAN (0.0.0.0)";
+"TUN Mode" = "TUN Mode";
+"tun2socks binary path" = "tun2socks binary path";
+"Privileged Helper" = "Privileged Helper";
+"Install Helper" = "Install Helper";
+"Uninstall Helper" = "Uninstall Helper";
+"Launch at Login" = "Launch at Login";
+"Check for Updates" = "Check for Updates";
+"Sniffing" = "Sniffing";
+"Mux" = "Mux";
+"Log Level" = "Log Level";
+"General" = "General";
+"Advanced" = "Advanced";
+"Language" = "Language";
+
+/* MARK: Logs */
+"Filter logs..." = "Filter logs...";
+"All" = "All";
+"Auto Scroll" = "Auto Scroll";
+"Clear Logs" = "Clear Logs";
+"Debug" = "Debug";
+"Info" = "Info";
+"Warning" = "Warning";
+"Error" = "Error";
+
+/* MARK: Editor / Errors */
+"Config Editor" = "Config Editor";
+"Invalid JSON" = "Invalid JSON";
+"Config is valid" = "Config is valid";
+"Validate" = "Validate";
+"Profile Name" = "Profile Name";
+"Config File Path" = "Config File Path";
+"Open in Editor" = "Open in Editor";
+"Reveal in Finder" = "Reveal in Finder";
+"Missing" = "Missing";
+"Xray binary not found. Please set the path in Settings." = "Xray binary not found. Please set the path in Settings.";
+"Config file not found." = "Config file not found.";
+"Helper installed successfully." = "Helper installed successfully.";
+"A newer version is available" = "A newer version is available";
+"You are up to date" = "You are up to date";
+"Import succeeded" = "Import succeeded";
+"Imported %d node(s)" = "Imported %d node(s)";
+"No valid share links found" = "No valid share links found";
+"Failed to start Xray." = "Failed to start Xray.";
+"Failed to stop Xray." = "Failed to stop Xray.";
+"Update failed" = "Update failed";
+"Are you sure?" = "Are you sure?";
+"This action cannot be undone." = "This action cannot be undone.";

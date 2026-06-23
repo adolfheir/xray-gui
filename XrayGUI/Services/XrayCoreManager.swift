@@ -1,28 +1,73 @@
 import Foundation
 
-class XrayCoreManager {
+/// Owns the Xray-core child process: launch, stdout/stderr piping, and a crash
+/// supervisor with exponential backoff.
+///
+/// All mutable state is confined to a single serial queue (`stateQueue`) because the
+/// process `terminationHandler` fires on an arbitrary background thread while the public
+/// API is driven from the main actor. Restart is delegated back to `AppState` so that
+/// proxy/TUN/traffic side effects are re-applied as a single source of truth.
+final class XrayCoreManager {
     static let shared = XrayCoreManager()
+
+    private let stateQueue = DispatchQueue(label: "com.xraygui.xraycore")
 
     private var process: Process?
     private var outputPipe: Pipe?
     private var errorPipe: Pipe?
 
-    // 守护状态：用户主动 stop() 时设为 false，阻止 terminationHandler 自动重启
+    // Supervisor state (guarded by stateQueue).
     private var shouldKeepAlive = false
     private var currentConfigPath: String?
     private var restartCount = 0
-    private let maxRestartCount = 5          // 连续崩溃上限
+    private let maxRestartCount = 5
     private var lastStartTime: Date?
+    private var pendingRestart: DispatchWorkItem?
 
     var xrayBinaryPath: String {
         get { UserDefaults.standard.string(forKey: "xrayBinaryPath") ?? "" }
         set { UserDefaults.standard.setValue(newValue, forKey: "xrayBinaryPath") }
     }
 
-    var isRunning: Bool { process?.isRunning ?? false }
+    var isRunning: Bool { stateQueue.sync { process?.isRunning ?? false } }
+
+    // MARK: - Public API (main actor)
 
     func start(configPath: String) throws {
-        guard !isRunning else { return }
+        var thrown: Error?
+        stateQueue.sync {
+            do { try startLocked(configPath: configPath) }
+            catch { thrown = error }
+        }
+        if let thrown { throw thrown }
+    }
+
+    func stop() {
+        stateQueue.sync {
+            shouldKeepAlive = false
+            pendingRestart?.cancel()
+            pendingRestart = nil
+            restartCount = 0
+            cleanupProcessLocked()
+        }
+        Task { @MainActor in
+            AppState.shared.isRunning = false
+            AppState.shared.addLog("Xray stopped", level: .info)
+        }
+    }
+
+    func restart(configPath: String? = nil) throws {
+        let path = stateQueue.sync { configPath ?? currentConfigPath }
+        guard let path else { throw XrayError.configNotFound }
+        stop()
+        Thread.sleep(forTimeInterval: 0.3)
+        try start(configPath: path)
+    }
+
+    // MARK: - Locked implementation (runs on stateQueue)
+
+    private func startLocked(configPath: String) throws {
+        guard !(process?.isRunning ?? false) else { return }
         guard !xrayBinaryPath.isEmpty, FileManager.default.fileExists(atPath: xrayBinaryPath) else {
             throw XrayError.binaryNotFound
         }
@@ -52,7 +97,6 @@ class XrayCoreManager {
                 for line in lines { AppState.shared.addLog(line, level: .info) }
             }
         }
-
         errPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
@@ -63,7 +107,8 @@ class XrayCoreManager {
         }
 
         proc.terminationHandler = { [weak self] p in
-            self?.handleTermination(exitCode: p.terminationStatus)
+            guard let self else { return }
+            stateQueue.async { self.handleTerminationLocked(process: p, exitCode: p.terminationStatus) }
         }
 
         try proc.run()
@@ -77,28 +122,13 @@ class XrayCoreManager {
         }
     }
 
-    func stop() {
-        shouldKeepAlive = false       // 告知 terminationHandler 不要重启
-        restartCount = 0
-        cleanupProcess()
-        Task { @MainActor in
-            AppState.shared.isRunning = false
-            AppState.shared.addLog("Xray stopped", level: .info)
-        }
-    }
-
-    func restart(configPath: String? = nil) throws {
-        let path = configPath ?? currentConfigPath
-        guard let path else { throw XrayError.configNotFound }
-        stop()
-        Thread.sleep(forTimeInterval: 0.3)
-        try start(configPath: path)
-    }
-
-    // MARK: - 守护逻辑
-
-    private func handleTermination(exitCode: Int32) {
-        cleanupProcess()
+    /// Crash supervisor. Runs on stateQueue. Ignores stale handlers from previous
+    /// processes and delegates the actual restart to `AppState` so side effects are
+    /// re-applied together.
+    private func handleTerminationLocked(process terminated: Process, exitCode: Int32) {
+        // Ignore terminations from a process that is no longer the active one.
+        guard terminated === process || process == nil else { return }
+        cleanupProcessLocked()
 
         Task { @MainActor in
             AppState.shared.isRunning = false
@@ -107,38 +137,44 @@ class XrayCoreManager {
 
         guard shouldKeepAlive, let configPath = currentConfigPath else { return }
 
-        // 如果进程启动后极短时间就崩溃（< 2s），视为连续崩溃
+        // A process that died within 2s of launch is treated as a crash loop.
         let aliveSeconds = lastStartTime.map { Date().timeIntervalSince($0) } ?? 99
-        if aliveSeconds < 2 {
-            restartCount += 1
-        } else {
-            restartCount = 0   // 运行超过 2s 才崩溃，重置计数
-        }
+        restartCount = aliveSeconds < 2 ? restartCount + 1 : 0
 
         if restartCount >= maxRestartCount {
             shouldKeepAlive = false
             Task { @MainActor in
                 AppState.shared.addLog("Xray crashed \(self.maxRestartCount) times consecutively, giving up.", level: .error)
+                AppState.shared.teardownProxySideEffects()
             }
             return
         }
 
-        // 指数退避：1s / 2s / 4s / 8s
-        let delay = pow(2.0, Double(restartCount - 1))
+        let delay = pow(2.0, Double(restartCount - 1)) // 1s / 2s / 4s / 8s
         Task { @MainActor in
             AppState.shared.addLog("Restarting in \(Int(delay))s (attempt \(self.restartCount)/\(self.maxRestartCount))...", level: .warning)
         }
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.shouldKeepAlive else { return }
-            try? self.start(configPath: configPath)
+        // Cancellable so a user-initiated stop() can abort a pending restart.
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            stateQueue.async {
+                guard self.shouldKeepAlive else { return }
+                self.pendingRestart = nil
+                _ = configPath // captured for clarity; AppState re-reads its own selection
+                Task { @MainActor in AppState.shared.handleCoreCrashRestart() }
+            }
         }
+        pendingRestart = work
+        stateQueue.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func cleanupProcess() {
+    private func cleanupProcessLocked() {
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         errorPipe?.fileHandleForReading.readabilityHandler = nil
-        process?.terminate()
+        if let p = process, p.isRunning {
+            p.terminate()
+        }
         process = nil
         outputPipe = nil
         errorPipe = nil
