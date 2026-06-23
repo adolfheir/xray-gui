@@ -39,18 +39,21 @@ struct NodesView: View {
             } label: {
                 Label("Add".localized, systemImage: "plus")
             }
+            .help("Add".localized)
 
             Button {
                 showNewNode = true
             } label: {
                 Label("New Node".localized, systemImage: "square.and.pencil")
             }
+            .help("New Node".localized)
 
             Button {
                 appState.importFromClipboard()
             } label: {
                 Label("Import from Clipboard".localized, systemImage: "doc.on.clipboard")
             }
+            .help("Import from Clipboard".localized)
 
             Spacer()
 
@@ -59,6 +62,7 @@ struct NodesView: View {
             } label: {
                 Label("Ping All".localized, systemImage: "bolt.horizontal")
             }
+            .help("Ping All".localized)
             .disabled(appState.nodes.isEmpty)
 
             Button {
@@ -66,6 +70,7 @@ struct NodesView: View {
             } label: {
                 Label("Sort by Latency".localized, systemImage: "arrow.up.arrow.down")
             }
+            .help("Sort by Latency".localized)
             .disabled(appState.nodes.isEmpty)
         }
         .padding(12)

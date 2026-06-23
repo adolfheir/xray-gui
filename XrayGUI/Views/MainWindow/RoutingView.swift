@@ -70,6 +70,7 @@ struct RoutingView: View {
                         Label("New Group".localized, systemImage: "plus")
                     }
                     .buttonStyle(.borderless)
+                    .help("New Group".localized)
                     .disabled(appState.nodes.isEmpty)
                 }
             } footer: {
@@ -105,6 +106,7 @@ struct RoutingView: View {
                         Label("Add Rule".localized, systemImage: "plus")
                     }
                     .buttonStyle(.borderless)
+                    .help("Add Rule".localized)
                 }
             } footer: {
                 if !appState.routing.customRules.isEmpty {

@@ -181,7 +181,7 @@ enum LatencyTester {
         guard socksPort > 0, socksPort <= 65535 else { return nil }
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = timeout
+        configuration.timeoutIntervalForRequest = timeout + 5
         configuration.timeoutIntervalForResource = timeout + 5
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         configuration.urlCache = nil
@@ -191,39 +191,88 @@ enum LatencyTester {
             kCFNetworkProxiesSOCKSPort as String: socksPort
         ]
 
-        let session = URLSession(configuration: configuration)
+        // A data-task delegate counts bytes in chunks (fast) rather than iterating the
+        // response one byte at a time, and cancels as soon as `maxBytes` or `timeout`
+        // is reached. Throughput is measured from first to last received chunk, so it
+        // reflects pure transfer rate (excluding SOCKS/TLS connection setup).
+        let delegate = SpeedProbeDelegate(maxBytes: maxBytes, timeout: timeout)
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
 
         var request = URLRequest(url: testURL)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 
-        let start = DispatchTime.now()
-        let deadlineNanos = start.uptimeNanoseconds &+ UInt64(timeout * 1_000_000_000)
-        var received = 0
-
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
-                return nil
-            }
-            for try await _ in bytes {
-                received &+= 1
-                // Check stop conditions every 64 KB to avoid per-byte clock syscalls.
-                if received & 0xFFFF == 0 {
-                    if received >= maxBytes { break }
-                    if DispatchTime.now().uptimeNanoseconds >= deadlineNanos { break }
-                }
-            }
-        } catch {
-            // Keep whatever we managed to download if it's a meaningful sample.
-            if received < 256_000 { return nil }
+        let (received, seconds): (Int, Double) = await withCheckedContinuation { continuation in
+            delegate.continuation = continuation
+            session.dataTask(with: request).resume()
         }
 
-        let elapsedNanos = DispatchTime.now().uptimeNanoseconds &- start.uptimeNanoseconds
-        let seconds = Double(elapsedNanos) / 1_000_000_000
-        guard seconds > 0.05, received > 0 else { return nil }
+        // Require a meaningful sample so the rate is stable; otherwise report failure.
+        guard received >= 200_000, seconds > 0.05 else { return nil }
         return (Double(received) * 8.0) / seconds / 1_000_000.0
+    }
+}
+
+// MARK: - Speed Probe Delegate
+
+/// Counts bytes received on a data task (in chunks, not per-byte) and stops the
+/// transfer once `maxBytes` or `timeout` is reached, then reports `(bytes, seconds)`
+/// where `seconds` spans first→last received chunk. Callbacks arrive serially on the
+/// session's delegate queue, so the mutable state needs no extra locking; `finished`
+/// guarantees the continuation resumes exactly once.
+private final class SpeedProbeDelegate: NSObject, URLSessionDataDelegate {
+    private let maxBytes: Int
+    private let deadline: DispatchTime
+    private var received = 0
+    private var firstByte: DispatchTime?
+    private var lastByte: DispatchTime?
+    private var finished = false
+    var continuation: CheckedContinuation<(Int, Double), Never>?
+
+    init(maxBytes: Int, timeout: TimeInterval) {
+        self.maxBytes = maxBytes
+        self.deadline = DispatchTime.now() + timeout
+    }
+
+    func urlSession(_: URLSession,
+                    dataTask: URLSessionDataTask,
+                    didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        if let http = response as? HTTPURLResponse, !(200 ... 299).contains(http.statusCode) {
+            completionHandler(.cancel)
+            finish()
+        } else {
+            completionHandler(.allow)
+        }
+    }
+
+    func urlSession(_: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let now = DispatchTime.now()
+        if firstByte == nil { firstByte = now }
+        received &+= data.count
+        lastByte = now
+        if received >= maxBytes || now >= deadline {
+            dataTask.cancel()
+            finish()
+        }
+    }
+
+    func urlSession(_: URLSession, task _: URLSessionTask, didCompleteWithError _: Error?) {
+        finish()
+    }
+
+    private func finish() {
+        guard !finished else { return }
+        finished = true
+        let seconds: Double
+        if let f = firstByte, let l = lastByte, l.uptimeNanoseconds > f.uptimeNanoseconds {
+            seconds = Double(l.uptimeNanoseconds &- f.uptimeNanoseconds) / 1_000_000_000
+        } else {
+            seconds = 0
+        }
+        continuation?.resume(returning: (received, seconds))
+        continuation = nil
     }
 }
 

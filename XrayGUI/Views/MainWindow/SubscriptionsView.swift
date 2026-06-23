@@ -33,11 +33,13 @@ struct SubscriptionsView: View {
                 } label: {
                     Label("Add".localized, systemImage: "plus")
                 }
+                .help("Add".localized)
                 Button {
                     Task { await appState.updateAllSubscriptions() }
                 } label: {
                     Label("Update All".localized, systemImage: "arrow.clockwise")
                 }
+                .help("Update All".localized)
                 .disabled(appState.subscriptions.isEmpty)
             }
         }

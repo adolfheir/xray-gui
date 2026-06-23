@@ -93,7 +93,8 @@ enum NodeLatencyProbe {
         }
 
         // Wait for the throwaway instance to start accepting connections before probing.
-        guard await waitForPort(port, timeout: 3) else { return nil }
+        // Allow a generous window — a cold xray launch on a busy machine can take a few seconds.
+        guard await waitForPort(port, timeout: 5) else { return nil }
 
         return await body(port)
     }

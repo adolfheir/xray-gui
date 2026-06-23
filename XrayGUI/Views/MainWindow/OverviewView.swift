@@ -80,6 +80,7 @@ struct OverviewView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .tint(appState.isRunning ? .red : .green)
+                .help((appState.isRunning ? "Stop" : "Start").localized)
                 .disabled(appState.isBusy)
             }
         }

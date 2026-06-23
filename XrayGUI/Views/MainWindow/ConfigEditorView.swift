@@ -69,6 +69,7 @@ struct ConfigEditorView: View {
                 } label: {
                     Label("Validate".localized, systemImage: "checkmark.seal")
                 }
+                .help("Validate".localized)
 
                 if isGenerated {
                     Button {
@@ -76,6 +77,7 @@ struct ConfigEditorView: View {
                     } label: {
                         Label("Export".localized, systemImage: "square.and.arrow.up")
                     }
+                    .help("Export".localized)
                     .disabled(appState.selectedNode == nil)
 
                     Button {
@@ -83,6 +85,7 @@ struct ConfigEditorView: View {
                     } label: {
                         Label("Regenerate".localized, systemImage: "arrow.clockwise")
                     }
+                    .help("Regenerate".localized)
                     .disabled(appState.selectedNode == nil)
                 } else {
                     Button {
@@ -90,6 +93,7 @@ struct ConfigEditorView: View {
                     } label: {
                         Label("Save".localized, systemImage: "tray.and.arrow.down")
                     }
+                    .help("Save".localized)
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(!isDirty)
                 }
