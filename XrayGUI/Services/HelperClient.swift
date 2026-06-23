@@ -1,15 +1,25 @@
 import Foundation
-import Security
 import ServiceManagement
 
-/// App-side client for the privileged helper. Manages the XPC connection, installs
-/// the helper via `SMJobBless`, and forwards TUN start/stop calls.
+/// App-side client for the privileged helper. Manages the XPC connection, installs the
+/// helper via `SMAppService` (macOS 13+), and forwards TUN start/stop calls.
+///
+/// `SMAppService.daemon` keeps the helper binary *inside* the app bundle
+/// (`Contents/Library/LaunchServices/com.xraygui.helper`) and registers the launchd
+/// job from the embedded `Contents/Library/LaunchDaemons/com.xraygui.helper.plist`.
+/// This replaces the deprecated `SMJobBless`, which required Developer ID signing with
+/// matching designated requirements and never worked on ad-hoc dev builds.
 final class HelperClient {
     static let shared = HelperClient()
 
+    private let daemonPlistName = "com.xraygui.helper.plist"
     private var connection: NSXPCConnection?
 
     private init() {}
+
+    private var service: SMAppService {
+        SMAppService.daemon(plistName: daemonPlistName)
+    }
 
     // MARK: Connection
 
@@ -27,9 +37,9 @@ final class HelperClient {
         } as? XrayHelperProtocol
     }
 
-    /// Whether the helper appears installed (binary present on disk).
+    /// Whether the helper is registered and enabled with launchd.
     var isHelperInstalled: Bool {
-        FileManager.default.fileExists(atPath: "/Library/PrivilegedHelperTools/\(HelperMachServiceName)")
+        service.status == .enabled
     }
 
     // MARK: Health
@@ -61,55 +71,61 @@ final class HelperClient {
         helper.getTUNStatus(reply: completion)
     }
 
-    func uninstallHelper(completion: @escaping (Bool, String) -> Void) {
-        guard let helper = proxy(completion) else { completion(false, "Helper not connected."); return }
-        helper.uninstall { ok, msg in
-            self.connection?.invalidate()
-            self.connection = nil
-            completion(ok, msg)
+    // MARK: Install (SMAppService)
+
+    /// Register the bundled helper as a privileged launchd daemon via `SMAppService`.
+    /// On first run macOS may require the user to approve the background item in
+    /// System Settings → General → Login Items & Extensions; in that case we open the
+    /// pane and report a clear message so the user can approve and retry.
+    func installHelper(completion: @escaping (Bool, String) -> Void) {
+        let service = self.service
+
+        switch service.status {
+        case .enabled:
+            completion(true, "Helper already installed.")
+            return
+        case .requiresApproval:
+            SMAppService.openSystemSettingsLoginItems()
+            completion(false, "Approval required: enable XrayGUI under System Settings → General → Login Items & Extensions → Allow in the Background, then retry.")
+            return
+        default:
+            break // .notRegistered / .notFound → register below
+        }
+
+        do {
+            try service.register()
+            // Drop any stale connection so the next call dials the freshly registered service.
+            connection?.invalidate()
+            connection = nil
+            if service.status == .enabled {
+                completion(true, "Helper installed successfully.")
+            } else {
+                SMAppService.openSystemSettingsLoginItems()
+                completion(false, "Helper registered but needs approval. Enable XrayGUI under System Settings → General → Login Items & Extensions, then retry.")
+            }
+        } catch {
+            completion(false, "Failed to register helper: \(error.localizedDescription)")
         }
     }
 
-    // MARK: Install (SMJobBless)
-
-    /// Installs the bundled `com.xraygui.helper` tool into /Library/PrivilegedHelperTools
-    /// using `SMJobBless`. Requires both the app and the helper to be Developer ID signed
-    /// with matching `SMPrivilegedExecutables` / `SMAuthorizedClients` designated
-    /// requirements. On unsigned dev builds this fails with a clear message.
-    func installHelper(completion: @escaping (Bool, String) -> Void) {
-        var authRef: AuthorizationRef?
-        var status = AuthorizationCreate(nil, nil, [], &authRef)
-        guard status == errAuthorizationSuccess, let authRef else {
-            completion(false, "Failed to create authorization (\(status)).")
-            return
+    /// Stop any running TUN, then unregister the launchd daemon via `SMAppService`.
+    func uninstallHelper(completion: @escaping (Bool, String) -> Void) {
+        let finishUnregister: () -> Void = { [weak self] in
+            guard let self else { completion(false, "Client deallocated."); return }
+            self.connection?.invalidate()
+            self.connection = nil
+            do {
+                try self.service.unregister()
+                completion(true, "Helper uninstalled.")
+            } catch {
+                completion(false, "Failed to unregister helper: \(error.localizedDescription)")
+            }
         }
-        defer { AuthorizationFree(authRef, []) }
-
-        var authItem = kSMRightBlessPrivilegedHelper.withCString { cString in
-            AuthorizationItem(name: cString, valueLength: 0, value: nil, flags: 0)
-        }
-        status = withUnsafeMutablePointer(to: &authItem) { itemPtr -> OSStatus in
-            var rights = AuthorizationRights(count: 1, items: itemPtr)
-            let flags: AuthorizationFlags = [.interactionAllowed, .preAuthorize, .extendRights]
-            return AuthorizationCopyRights(authRef, &rights, nil, flags, nil)
-        }
-        guard status == errAuthorizationSuccess else {
-            completion(false, status == errAuthorizationCanceled
-                ? "Authorization cancelled."
-                : "Authorization denied (\(status)).")
-            return
-        }
-
-        var cfError: Unmanaged<CFError>?
-        let ok = SMJobBless(kSMDomainSystemLaunchd, HelperMachServiceName as CFString, authRef, &cfError)
-        if ok {
-            connection?.invalidate()
-            connection = nil
-            completion(true, "Helper installed successfully.")
+        // Best-effort: tear down TUN side effects before the daemon goes away.
+        if let helper = proxy({ _, _ in finishUnregister() }) {
+            helper.stopTUN { _, _ in finishUnregister() }
         } else {
-            let err = cfError?.takeRetainedValue()
-            let detail = err.map { CFErrorCopyDescription($0) as String } ?? "unknown error"
-            completion(false, "SMJobBless failed: \(detail). The app and helper must be Developer ID signed.")
+            finishUnregister()
         }
     }
 }

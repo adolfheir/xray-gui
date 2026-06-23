@@ -7,6 +7,8 @@ import SwiftUI
 struct NodesView: View {
     @EnvironmentObject var appState: AppState
     @State private var showImportSheet = false
+    @State private var showNewNode = false
+    @State private var nodeToEdit: ProxyNode?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +18,14 @@ struct NodesView: View {
         }
         .sheet(isPresented: $showImportSheet) {
             ImportLinksSheet()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showNewNode) {
+            NodeEditorView(node: nil)
+                .environmentObject(appState)
+        }
+        .sheet(item: $nodeToEdit) { node in
+            NodeEditorView(node: node)
                 .environmentObject(appState)
         }
     }
@@ -28,6 +38,12 @@ struct NodesView: View {
                 showImportSheet = true
             } label: {
                 Label("Add".localized, systemImage: "plus")
+            }
+
+            Button {
+                showNewNode = true
+            } label: {
+                Label("New Node".localized, systemImage: "square.and.pencil")
             }
 
             Button {
@@ -74,7 +90,7 @@ struct NodesView: View {
                     if !subNodes.isEmpty {
                         Section(sub.name) {
                             ForEach(subNodes) { node in
-                                NodeRow(node: node)
+                                NodeRow(node: node) { nodeToEdit = node }
                             }
                         }
                     }
@@ -84,7 +100,7 @@ struct NodesView: View {
                 if !manual.isEmpty {
                     Section("Manual".localized) {
                         ForEach(manual) { node in
-                            NodeRow(node: node)
+                            NodeRow(node: node) { nodeToEdit = node }
                         }
                     }
                 }
@@ -99,6 +115,8 @@ struct NodesView: View {
 struct NodeRow: View {
     @EnvironmentObject var appState: AppState
     let node: ProxyNode
+    var onEdit: () -> Void = {}
+    @State private var showShareSheet = false
 
     private var isSelected: Bool { appState.selectedNodeId == node.id }
 
@@ -121,6 +139,8 @@ struct NodeRow: View {
 
             Spacer()
 
+            SpeedBadge(result: appState.speed[node.id])
+
             LatencyBadge(result: appState.latency[node.id])
 
             if isSelected {
@@ -132,11 +152,20 @@ struct NodeRow: View {
                 IconButton("bolt.horizontal", tooltip: "Test Latency".localized) {
                     appState.testLatency(node)
                 }
+                IconButton("speedometer", tooltip: "Test Speed".localized) {
+                    appState.testSpeed(node)
+                }
                 IconButton("doc.on.clipboard", tooltip: "Copy Link".localized) {
-                    guard let link = node.rawLink else { return }
+                    guard let link = ShareLinkExporter.export(node) else { return }
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(link, forType: .string)
+                }
+                IconButton("qrcode", tooltip: "Share QR".localized) {
+                    showShareSheet = true
+                }
+                IconButton("pencil", tooltip: "Edit".localized) {
+                    onEdit()
                 }
                 IconButton("trash", tooltip: "Delete".localized, color: .red) {
                     appState.removeNode(node.id)
@@ -147,6 +176,80 @@ struct NodeRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             appState.selectNode(node.id)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            NodeShareSheet(node: node)
+        }
+    }
+}
+
+/// A modal sheet that shares a single node as a QR code plus its share link text.
+///
+/// The link is produced by ``ShareLinkExporter`` (original `rawLink` when present,
+/// otherwise a freshly built URI). When the node can't be exported a friendly
+/// notice is shown instead.
+struct NodeShareSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let node: ProxyNode
+
+    private var link: String? { ShareLinkExporter.export(node) }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text(node.name)
+                .font(.headline)
+                .lineLimit(1)
+
+            if let link {
+                content(for: link)
+            } else {
+                Spacer()
+                Text("This node can't be exported to a share link.".localized)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Spacer()
+
+                Button("Done".localized) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 320)
+    }
+
+    @ViewBuilder
+    private func content(for link: String) -> some View {
+        if let qr = QRCodeGenerator.image(from: link) {
+            Image(nsImage: qr)
+                .interpolation(.none)
+                .resizable()
+                .frame(width: 220, height: 220)
+                .background(Color.white)
+                .cornerRadius(8)
+        }
+
+        ScrollView {
+            Text(link)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+        }
+        .frame(maxHeight: 90)
+        .background(Color.secondary.opacity(0.06))
+        .cornerRadius(8)
+
+        HStack {
+            Button("Copy Link".localized) {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(link, forType: .string)
+            }
+            Spacer()
+            Button("Done".localized) { dismiss() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
         }
     }
 }

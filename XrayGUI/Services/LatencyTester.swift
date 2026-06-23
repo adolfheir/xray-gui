@@ -154,6 +154,77 @@ enum LatencyTester {
             return nil
         }
     }
+
+    // MARK: - Download Speed Through SOCKS5
+
+    /// Measures download throughput (in Mbps) through a local SOCKS5 proxy by
+    /// streaming a large test file and stopping at whichever comes first: `maxBytes`
+    /// downloaded or `timeout` elapsed. Throughput is `bytesReceived * 8 / seconds`.
+    ///
+    /// Streaming (rather than a single `data(for:)`) lets a *slow* node still report a
+    /// real (low) speed instead of just timing out — we measure however much arrived
+    /// within the window.
+    ///
+    /// - Parameters:
+    ///   - socksPort: The local SOCKS5 listening port (the throwaway probe inbound).
+    ///   - testURL: A large downloadable resource. Defaults to Cloudflare's speed
+    ///     endpoint requesting 100 MB (capped client-side by `maxBytes`).
+    ///   - maxBytes: Stop after this many bytes (default 12 MB).
+    ///   - timeout: Stop after this many seconds (default 12s).
+    /// - Returns: Throughput in Mbps, or `nil` on connection failure / no data.
+    static func downloadSpeed(
+        throughSOCKSPort socksPort: Int,
+        testURL: URL = URL(string: "https://speed.cloudflare.com/__down?bytes=100000000")!,
+        maxBytes: Int = 12_000_000,
+        timeout: TimeInterval = 12
+    ) async -> Double? {
+        guard socksPort > 0, socksPort <= 65535 else { return nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = timeout
+        configuration.timeoutIntervalForResource = timeout + 5
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        configuration.urlCache = nil
+        configuration.connectionProxyDictionary = [
+            kCFNetworkProxiesSOCKSEnable as String: 1,
+            kCFNetworkProxiesSOCKSProxy as String: "127.0.0.1",
+            kCFNetworkProxiesSOCKSPort as String: socksPort
+        ]
+
+        let session = URLSession(configuration: configuration)
+        defer { session.finishTasksAndInvalidate() }
+
+        var request = URLRequest(url: testURL)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+        let start = DispatchTime.now()
+        let deadlineNanos = start.uptimeNanoseconds &+ UInt64(timeout * 1_000_000_000)
+        var received = 0
+
+        do {
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
+                return nil
+            }
+            for try await _ in bytes {
+                received &+= 1
+                // Check stop conditions every 64 KB to avoid per-byte clock syscalls.
+                if received & 0xFFFF == 0 {
+                    if received >= maxBytes { break }
+                    if DispatchTime.now().uptimeNanoseconds >= deadlineNanos { break }
+                }
+            }
+        } catch {
+            // Keep whatever we managed to download if it's a meaningful sample.
+            if received < 256_000 { return nil }
+        }
+
+        let elapsedNanos = DispatchTime.now().uptimeNanoseconds &- start.uptimeNanoseconds
+        let seconds = Double(elapsedNanos) / 1_000_000_000
+        guard seconds > 0.05, received > 0 else { return nil }
+        return (Double(received) * 8.0) / seconds / 1_000_000.0
+    }
 }
 
 // MARK: - Atomic Flag

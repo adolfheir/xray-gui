@@ -11,6 +11,9 @@ build/
 # Generated
 XrayGUI.xcodeproj/
 
+# Release artifacts (built dmg / zip output)
+dist/
+
 # macOS
 .DS_Store
 .AppleDouble

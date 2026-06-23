@@ -31,6 +31,60 @@ final class XrayCoreManager {
 
     var isRunning: Bool { stateQueue.sync { process?.isRunning ?? false } }
 
+    // MARK: - Version / capabilities
+
+    /// Caches the parsed version per binary path so we don't re-exec `xray version`
+    /// on every config build.
+    private var versionCache: (path: String, version: String)?
+
+    /// The core's reported version (e.g. "26.3.27"), obtained by running
+    /// `xray version` once per binary path. Returns nil if the binary is missing or
+    /// produced no parseable version.
+    func installedVersion() -> String? {
+        let path = xrayBinaryPath
+        guard !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) else { return nil }
+        if let cache = versionCache, cache.path == path { return cache.version }
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["version"]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = Pipe()
+        do { try proc.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        guard let output = String(data: data, encoding: .utf8),
+              let version = Self.parseVersion(output) else { return nil }
+        versionCache = (path, version)
+        return version
+    }
+
+    /// Whether the configured core still accepts the legacy `allowInsecure` TLS
+    /// option. Xray-core moved to calendar versioning and removed `allowInsecure`
+    /// (migrated to `pinnedPeerCertSha256`) in the v25+ line. Unknown versions are
+    /// treated as modern so generated configs never fail to load on the newest core.
+    var coreSupportsAllowInsecure: Bool {
+        guard let version = installedVersion(),
+              let major = Int(version.split(separator: ".").first.map(String.init) ?? "") else {
+            return false
+        }
+        return major < 25
+    }
+
+    /// Extracts the dotted version token from `xray version` output, e.g.
+    /// "Xray 26.3.27 (Xray, Penetrates Everything.) ..." → "26.3.27".
+    private static func parseVersion(_ output: String) -> String? {
+        for token in output.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }) {
+            let trimmed = (token.first == "v" || token.first == "V") ? token.dropFirst() : token
+            let parts = trimmed.split(separator: ".")
+            if parts.count >= 2, parts.allSatisfy({ Int($0) != nil }) {
+                return String(trimmed)
+            }
+        }
+        return nil
+    }
+
     // MARK: - Public API (main actor)
 
     func start(configPath: String) throws {

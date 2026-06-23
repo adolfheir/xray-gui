@@ -122,6 +122,33 @@ struct LatencyBadge: View {
     }
 }
 
+/// Badge for a node's measured download speed (Mbps). Renders nothing until a test
+/// has been run, so rows stay uncluttered.
+struct SpeedBadge: View {
+    let result: SpeedResult?
+
+    var body: some View {
+        switch result {
+        case .some(.testing):
+            ProgressView().controlSize(.mini)
+        case .some(.mbps(let v)):
+            Badge(text: String(format: "%.1f Mbps", v), color: color(for: v))
+        case .some(.failed):
+            Badge(text: "failed".localized, color: .red)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func color(for mbps: Double) -> Color {
+        switch mbps {
+        case 20...: return .green
+        case 5 ..< 20: return .orange
+        default: return .red
+        }
+    }
+}
+
 /// A centered empty-state placeholder with an optional primary action.
 struct EmptyState: View {
     let icon: String

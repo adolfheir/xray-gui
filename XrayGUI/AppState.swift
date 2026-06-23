@@ -33,6 +33,14 @@ enum LatencyResult: Equatable {
     case ms(Int)
 }
 
+/// Per-node download-speed-test state (real throughput through the node, in Mbps).
+enum SpeedResult: Equatable {
+    case untested
+    case testing
+    case failed
+    case mbps(Double)
+}
+
 /// The single source of truth for the whole app: persisted configuration (nodes,
 /// subscriptions, routing, build options) plus live runtime state (running flag, logs,
 /// traffic, latency). All proxy orchestration (start/stop, config generation+validation,
@@ -50,6 +58,10 @@ final class AppState: ObservableObject {
     @Published var infoMessage: String? // non-error toast (e.g. "Imported 5 nodes")
     @Published var traffic: TrafficStatsManager.Snapshot = .zero
     @Published var latency: [UUID: LatencyResult] = [:]
+    @Published var speed: [UUID: SpeedResult] = [:]
+
+    /// One-shot guard so the main window is auto-opened only once at launch.
+    var didShowInitialWindow = false
 
     // MARK: Persisted — selection & mode
     @Published var proxyMode: ProxyMode = .systemProxy { didSet { persist() } }
@@ -65,6 +77,12 @@ final class AppState: ObservableObject {
     @Published var routing: RoutingSettings = .default { didSet { persist() } }
     @Published var buildOptions: ConfigBuildOptions = .default { didSet { persist() } }
 
+    // MARK: Persisted — strategy groups (balancer)
+    /// User-defined load-balancing groups. When `selectedGroupId` points at one, the
+    /// generated config is a balancer over the group's members instead of a single node.
+    @Published var nodeGroups: [NodeGroup] = [] { didSet { persist() } }
+    @Published var selectedGroupId: UUID? { didSet { persist() } }
+
     // MARK: Persisted — preferences
     @Published var appLanguage: AppLanguage = .system {
         didSet {
@@ -74,12 +92,39 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// User-selected UI appearance (follow system / light / dark). Persisted
+    /// independently of `Key`/`persist()` (like `appLanguage`) so it never
+    /// collides with the encoded-data keys.
+    @Published var appTheme: AppTheme = .system {
+        didSet {
+            UserDefaults.standard.set(appTheme.rawValue, forKey: "appTheme")
+            objectWillChange.send()
+        }
+    }
+
     private var cancellables = Set<AnyCancellable>()
     private var autoUpdateTimer: Timer?
+
+    // MARK: Connection resilience
+    /// Re-establishes the connection after the Mac wakes from sleep.
+    private let powerMonitor = PowerEventMonitor()
+    /// Restores the system proxy if it is changed from outside the app.
+    private let proxyGuard = SystemProxyGuard()
+    /// Reconnects on network path changes (Wi-Fi switch, cable plug/unplug, etc.).
+    private let networkMonitor = NetworkMonitor()
+    /// One-shot guard so the monitor callbacks are wired only once.
+    private var resilienceWired = false
+    /// Timestamp of our own most recent system-proxy write. Used to ignore the
+    /// proxy-guard notifications triggered by our own `networksetup` calls so the
+    /// guard never fights itself in a loop.
+    private var lastProxyWriteAt: Date?
 
     private init() {
         load()
         appLanguage = LocalizationManager.shared.current
+        if let raw = UserDefaults.standard.string(forKey: "appTheme"), let t = AppTheme(rawValue: raw) {
+            appTheme = t
+        }
         scheduleAutoUpdate()
     }
 
@@ -123,6 +168,7 @@ final class AppState: ObservableObject {
             try XrayCoreManager.shared.start(configPath: path)
             applyProxySideEffectsOnStart()
             startTrafficPolling()
+            startResilienceMonitors()
         } catch {
             errorMessage = error.localizedDescription
             // Roll back anything partial.
@@ -134,6 +180,7 @@ final class AppState: ObservableObject {
     func stop() {
         guard isRunning || isBusy else { return }
         isBusy = true
+        stopResilienceMonitors()
         teardownProxySideEffects()
         XrayCoreManager.shared.stop()
         isBusy = false
@@ -147,6 +194,7 @@ final class AppState: ObservableObject {
         traffic = .zero
         switch proxyMode {
         case .systemProxy:
+            lastProxyWriteAt = Date()
             SystemProxyManager.shared.disableSystemProxy()
         case .tun:
             TunManager.shared.stop { [weak self] ok, msg in
@@ -167,6 +215,7 @@ final class AppState: ObservableObject {
             try XrayCoreManager.shared.start(configPath: path)
             applyProxySideEffectsOnStart()
             startTrafficPolling()
+            startResilienceMonitors()
         } catch {
             errorMessage = error.localizedDescription
             XrayCoreManager.shared.stop()
@@ -179,18 +228,97 @@ final class AppState: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.start() }
     }
 
+    // MARK: - Connection resilience
+
+    /// Start the wake / network / system-proxy monitors for the duration of a run.
+    /// Idempotent — each monitor guards its own start. The proxy guard is only useful
+    /// in system-proxy mode, so it is started conditionally.
+    private func startResilienceMonitors() {
+        wireResilienceIfNeeded()
+        powerMonitor.start()
+        networkMonitor.start()
+        if proxyMode == .systemProxy { proxyGuard.start() }
+    }
+
+    /// Stop all resilience monitors (on user-initiated stop or supervisor give-up).
+    private func stopResilienceMonitors() {
+        powerMonitor.stop()
+        networkMonitor.stop()
+        proxyGuard.stop()
+    }
+
+    /// Wire the monitor callbacks exactly once. All handlers are no-ops unless a run is
+    /// in progress, and each reconnect path is idempotent.
+    private func wireResilienceIfNeeded() {
+        guard !resilienceWired else { return }
+        resilienceWired = true
+
+        // After wake from sleep, sockets and the upstream connection are usually dead;
+        // relaunch the core (which also re-applies proxy/TUN side effects).
+        powerMonitor.onWake = { [weak self] in
+            guard let self, isRunning else { return }
+            addLog("Woke from sleep — reconnecting.", level: .info)
+            restart()
+        }
+
+        // On a network path change, reconnect once connectivity is back. We ignore the
+        // "became unreachable" edge: there is nothing to reconnect to until a usable
+        // path returns, and the crash supervisor handles a core that dies meanwhile.
+        networkMonitor.onPathChange = { [weak self] isReachable in
+            guard let self, isRunning, isReachable else { return }
+            addLog("Network changed — reconnecting.", level: .info)
+            restart()
+        }
+
+        // If the system proxy is changed from outside the app (user edit, another VPN),
+        // restore it — but ignore the notifications caused by our own writes.
+        proxyGuard.onProxyChanged = { [weak self] in
+            guard let self, isRunning, proxyMode == .systemProxy else { return }
+            if let last = lastProxyWriteAt, Date().timeIntervalSince(last) < 2 { return }
+            addLog("System proxy was changed externally — restoring.", level: .warning)
+            lastProxyWriteAt = Date()
+            SystemProxyManager.shared.enableSystemProxy(httpPort: buildOptions.httpPort,
+                                                        socksPort: buildOptions.socksPort)
+        }
+    }
+
+    /// Synchronous teardown safe to call from `applicationWillTerminate` (i.e. on any
+    /// quit path: menu Quit, an Apple-Event `quit`, or a SIGTERM from `scripts/run.sh`).
+    ///
+    /// It is `nonisolated` and reads the persisted proxy mode from `UserDefaults`, so it
+    /// touches no main-actor state and needs no `await`. The system-proxy reset runs
+    /// synchronously (via `networksetup`) and therefore completes before the process
+    /// exits, ensuring the Mac is never left routing into a dead core.
+    nonisolated static func terminateCleanup() {
+        XrayCoreManager.shared.stop()
+        TrafficStatsManager.shared.stop()
+        let mode = UserDefaults.standard.string(forKey: "proxyMode") ?? ProxyMode.systemProxy.rawValue
+        switch mode {
+        case ProxyMode.tun.rawValue:
+            TunManager.shared.stop { _, _ in }
+        case ProxyMode.manual.rawValue:
+            break
+        default:
+            SystemProxyManager.shared.disableSystemProxy()
+        }
+    }
+
     /// Change proxy mode, reapplying side effects if currently running.
     func switchMode(_ mode: ProxyMode) {
         guard mode != proxyMode else { return }
         if isRunning {
             // Tear down the old mode's side effects, switch, then re-apply.
             switch proxyMode {
-            case .systemProxy: SystemProxyManager.shared.disableSystemProxy()
+            case .systemProxy:
+                lastProxyWriteAt = Date()
+                SystemProxyManager.shared.disableSystemProxy()
             case .tun: TunManager.shared.stop { _, _ in }
             case .manual: break
             }
             proxyMode = mode
             applyProxySideEffectsOnStart()
+            // The proxy guard is only relevant in system-proxy mode.
+            if mode == .systemProxy { proxyGuard.start() } else { proxyGuard.stop() }
         } else {
             proxyMode = mode
         }
@@ -199,6 +327,7 @@ final class AppState: ObservableObject {
     private func applyProxySideEffectsOnStart() {
         switch proxyMode {
         case .systemProxy:
+            lastProxyWriteAt = Date()
             SystemProxyManager.shared.enableSystemProxy(httpPort: buildOptions.httpPort,
                                                         socksPort: buildOptions.socksPort)
         case .tun:
@@ -242,8 +371,17 @@ final class AppState: ObservableObject {
             try validateConfig(path: profile.configPath)
             return profile.configPath
         }
-        guard let node = selectedNode else { throw AppError.noSelection }
-        let data = try ConfigBuilder.buildConfig(node: node, routing: routing, options: buildOptions)
+        let data: Data
+        if let group = selectedGroup, !groupMembers(group).isEmpty {
+            // Balancer path: build a load-balancing config over the group's members.
+            data = try ConfigBuilder.buildConfig(group: group,
+                                                 nodes: groupMembers(group),
+                                                 routing: routing,
+                                                 options: buildOptions)
+        } else {
+            guard let node = selectedNode else { throw AppError.noSelection }
+            data = try ConfigBuilder.buildConfig(node: node, routing: routing, options: buildOptions)
+        }
         let url = configDirectory.appendingPathComponent("current-config.json")
         try data.write(to: url)
         try validateConfig(path: url.path)
@@ -275,12 +413,27 @@ final class AppState: ObservableObject {
 
     func selectNode(_ id: UUID) {
         selectedNodeId = id
+        selectedGroupId = nil // node and group selection are mutually exclusive
         if isRunning { restart() }
     }
 
     func removeNode(_ id: UUID) {
         nodes.removeAll { $0.id == id }
         if selectedNodeId == id { selectedNodeId = nodes.first?.id }
+    }
+
+    /// Append a manually-created node and select it.
+    func addNode(_ node: ProxyNode) {
+        nodes.append(node)
+        selectedNodeId = node.id
+        selectedGroupId = nil // node and group selection are mutually exclusive
+    }
+
+    /// Replace an existing node (matched by id) with an edited copy.
+    func updateNode(_ node: ProxyNode) {
+        guard let idx = nodes.firstIndex(where: { $0.id == node.id }) else { return }
+        nodes[idx] = node
+        if isRunning && selectedNodeId == node.id { restart() }
     }
 
     /// Parse arbitrary text (single link, multi-line, or base64 subscription blob) and
@@ -303,6 +456,51 @@ final class AppState: ObservableObject {
     func importFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         _ = importLinks(text)
+    }
+
+    // MARK: - Node groups
+
+    /// The currently selected strategy group, if any.
+    var selectedGroup: NodeGroup? {
+        selectedGroupId.flatMap { id in nodeGroups.first { $0.id == id } }
+    }
+
+    /// Resolves a group's member ids to live `ProxyNode`s, preserving member order and
+    /// silently dropping ids that no longer exist.
+    func groupMembers(_ group: NodeGroup) -> [ProxyNode] {
+        group.memberIds.compactMap { mid in nodes.first { $0.id == mid } }
+    }
+
+    /// Whether the next launch should build a balancer config from `selectedGroup`
+    /// rather than the single `selectedNode`. True only when a non-empty group is
+    /// selected (and a raw profile is not in use).
+    var isUsingGroup: Bool {
+        guard !useCustomProfile, let group = selectedGroup else { return false }
+        return !groupMembers(group).isEmpty
+    }
+
+    func addGroup(_ group: NodeGroup) {
+        nodeGroups.append(group)
+    }
+
+    func updateGroup(_ group: NodeGroup) {
+        guard let idx = nodeGroups.firstIndex(where: { $0.id == group.id }) else { return }
+        nodeGroups[idx] = group
+        if selectedGroupId == group.id, isRunning { restart() }
+    }
+
+    func removeGroup(_ id: UUID) {
+        nodeGroups.removeAll { $0.id == id }
+        if selectedGroupId == id { selectedGroupId = nil }
+    }
+
+    /// Select a strategy group as the active outbound source. Selecting a group is
+    /// mutually exclusive with selecting a single node, so the node selection is
+    /// cleared. Restarts the core if running.
+    func selectGroup(_ id: UUID) {
+        selectedGroupId = id
+        selectedNodeId = nil
+        if isRunning { restart() }
     }
 
     // MARK: - Subscriptions
@@ -368,17 +566,64 @@ final class AppState: ObservableObject {
     // MARK: - Latency
 
     func testLatency(_ node: ProxyNode) {
+        guard node.supportedByXray else { latency[node.id] = .failed; return }
         latency[node.id] = .testing
+        let xrayPath = XrayCoreManager.shared.xrayBinaryPath
+        let options = buildOptions
         Task {
-            let ms = await LatencyTester.tcpPing(host: node.address, port: node.port)
+            // Real end-to-end probe: route a request through a throwaway instance of
+            // this node, not a bare TCP handshake to its address.
+            let ms = await NodeLatencyProbe.measure(node: node, xrayPath: xrayPath, options: options)
             await MainActor.run {
                 self.latency[node.id] = ms.map { .ms($0) } ?? .failed
             }
         }
     }
 
+    /// Probe every node's real latency, bounding how many throwaway `xray` instances
+    /// run at once (each probe is a short-lived process).
     func testAllLatency() {
-        for node in nodes { testLatency(node) }
+        let targets = nodes.filter(\.supportedByXray)
+        for node in targets { latency[node.id] = .testing }
+        for node in nodes where !node.supportedByXray { latency[node.id] = .failed }
+        let xrayPath = XrayCoreManager.shared.xrayBinaryPath
+        let options = buildOptions
+        Task {
+            let maxConcurrent = 5
+            var pending = targets.makeIterator()
+            await withTaskGroup(of: (UUID, Int?).self) { group in
+                var inFlight = 0
+                func startNext() -> Bool {
+                    guard let node = pending.next() else { return false }
+                    group.addTask {
+                        (node.id, await NodeLatencyProbe.measure(node: node, xrayPath: xrayPath, options: options))
+                    }
+                    return true
+                }
+                for _ in 0 ..< maxConcurrent where startNext() { inFlight += 1 }
+                while inFlight > 0, let (id, ms) = await group.next() {
+                    inFlight -= 1
+                    await MainActor.run { self.latency[id] = ms.map { .ms($0) } ?? .failed }
+                    if startNext() { inFlight += 1 }
+                }
+            }
+        }
+    }
+
+    /// Real download-speed test for a single node: spins up a throwaway instance and
+    /// downloads through it, reporting Mbps. On-demand only (no batch) since it
+    /// consumes real bandwidth.
+    func testSpeed(_ node: ProxyNode) {
+        guard node.supportedByXray else { speed[node.id] = .failed; return }
+        speed[node.id] = .testing
+        let xrayPath = XrayCoreManager.shared.xrayBinaryPath
+        let options = buildOptions
+        Task {
+            let mbps = await NodeLatencyProbe.measureSpeed(node: node, xrayPath: xrayPath, options: options)
+            await MainActor.run {
+                self.speed[node.id] = mbps.map { .mbps($0) } ?? .failed
+            }
+        }
     }
 
     func sortNodesByLatency() {
@@ -419,6 +664,8 @@ final class AppState: ObservableObject {
         static let profiles = "profiles"
         static let routing = "routingSettings.v2"
         static let buildOptions = "buildOptions.v2"
+        static let nodeGroups = "nodeGroups.v1"
+        static let selectedGroupId = "selectedGroupId"
         static let proxyMode = "proxyMode"
         static let selectedNodeId = "selectedNodeId"
         static let selectedProfileId = "selectedProfileId"
@@ -436,6 +683,8 @@ final class AppState: ObservableObject {
         d.set(try? enc.encode(profiles), forKey: Key.profiles)
         d.set(try? enc.encode(routing), forKey: Key.routing)
         d.set(try? enc.encode(buildOptions), forKey: Key.buildOptions)
+        d.set(try? enc.encode(nodeGroups), forKey: Key.nodeGroups)
+        d.set(selectedGroupId?.uuidString, forKey: Key.selectedGroupId)
         d.set(proxyMode.rawValue, forKey: Key.proxyMode)
         d.set(selectedNodeId?.uuidString, forKey: Key.selectedNodeId)
         d.set(selectedProfileId?.uuidString, forKey: Key.selectedProfileId)
@@ -452,6 +701,8 @@ final class AppState: ObservableObject {
         if let data = d.data(forKey: Key.profiles), let v = try? dec.decode([Profile].self, from: data) { profiles = v }
         if let data = d.data(forKey: Key.routing), let v = try? dec.decode(RoutingSettings.self, from: data) { routing = v }
         if let data = d.data(forKey: Key.buildOptions), let v = try? dec.decode(ConfigBuildOptions.self, from: data) { buildOptions = v }
+        if let data = d.data(forKey: Key.nodeGroups), let v = try? dec.decode([NodeGroup].self, from: data) { nodeGroups = v }
+        if let raw = d.string(forKey: Key.selectedGroupId) { selectedGroupId = UUID(uuidString: raw) }
         if let raw = d.string(forKey: Key.proxyMode), let m = ProxyMode(rawValue: raw) { proxyMode = m }
         if let raw = d.string(forKey: Key.selectedNodeId) { selectedNodeId = UUID(uuidString: raw) }
         if let raw = d.string(forKey: Key.selectedProfileId) { selectedProfileId = UUID(uuidString: raw) }

@@ -7,34 +7,53 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: 5.9
-    MACOSX_DEPLOYMENT_TARGET: "13.0"
-    ENABLE_HARDENED_RUNTIME: YES
+    PRODUCT_NAME: XrayGUI
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_HARDENED_RUNTIME: NO
 
 targets:
   XrayGUI:
     type: application
     platform: macOS
     sources:
-      - path: XrayGUI
-      - path: Shared
+      - XrayGUI
+      - Shared
+    settings:
+      base:
+        INFOPLIST_FILE: XrayGUI/Info.plist
+        CODE_SIGN_ENTITLEMENTS: XrayGUI/XrayGUI.entitlements
+        ENABLE_APP_SANDBOX: NO
     dependencies:
-      # Build the privileged helper alongside the app and embed it at the
-      # SMJobBless-required location inside the app bundle.
       - target: XrayHelper
+        embed: true
         copy:
           destination: wrapper
           subpath: Contents/Library/LaunchServices
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.xraygui.app
-        INFOPLIST_FILE: XrayGUI/Info.plist
-        CODE_SIGN_ENTITLEMENTS: XrayGUI/XrayGUI.entitlements
-        PRODUCT_NAME: XrayGUI
-        CODE_SIGNING_REQUIRED: NO
-        CODE_SIGN_IDENTITY: ""
-        SWIFT_VERSION: "5.9"
-
+    postBuildScripts:
+      - name: Embed LaunchDaemon plist
+        script: |
+          DEST="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons"
+          mkdir -p "$DEST"
+          cp "${SRCROOT}/XrayHelper/com.xraygui.helper.plist" "$DEST/com.xraygui.helper.plist"
+        inputFiles:
+          - $(SRCROOT)/XrayHelper/com.xraygui.helper.plist
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/com.xraygui.helper.plist
+    info:
+      path: XrayGUI/Info.plist
+      properties:
+        CFBundleName: XrayGUI
+        CFBundleDisplayName: XrayGUI
+        CFBundleIdentifier: com.xraygui.app
+        CFBundleShortVersionString: 1.0.0
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "13.0"
+        LSUIElement: false
+        XrayBundledCoreVersion: "25.9.11"
   XrayHelper:
     type: tool
     platform: macOS
@@ -46,8 +65,17 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.xraygui.helper
         INFOPLIST_FILE: XrayHelper/Info.plist
         CODE_SIGN_ENTITLEMENTS: XrayHelper/XrayHelper.entitlements
-        INSTALL_PATH: /Library/PrivilegedHelperTools
         SKIP_INSTALL: NO
         PRODUCT_NAME: com.xraygui.helper
         CODE_SIGNING_REQUIRED: NO
-        CODE_SIGN_IDENTITY: ""
+        CODE_SIGN_IDENTITY: "-"
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+    info:
+      path: XrayHelper/Info.plist
+      properties:
+        CFBundleIdentifier: com.xraygui.helper
+        CFBundleName: XrayHelper
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.1.0"
+        SMAuthorizedClients:
+          - "identifier com.xraygui.app"

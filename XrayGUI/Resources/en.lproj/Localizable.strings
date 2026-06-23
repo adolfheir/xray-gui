@@ -21,6 +21,7 @@
 "Update" = "Update";
 "Refresh" = "Refresh";
 "Copy" = "Copy";
+"Clear" = "Clear";
 "Settings" = "Settings";
 "About" = "About";
 "Loading…" = "Loading…";
@@ -68,6 +69,8 @@
 "Current Node" = "Current Node";
 "Latency" = "Latency";
 "Test Latency" = "Test Latency";
+"Test Speed" = "Test Speed";
+"failed" = "failed";
 "Upload" = "Upload";
 "Download" = "Download";
 "Speed" = "Speed";
@@ -118,6 +121,13 @@
 "Path to xray binary" = "Path to xray binary";
 "Binary found" = "Binary found";
 "Binary not found at this path" = "Binary not found at this path";
+"Download from GitHub" = "Download from GitHub";
+"Downloads the latest Xray-core release for your Mac and installs it automatically." = "Downloads the latest Xray-core release for your Mac and installs it automatically.";
+"Installed Xray-core %@" = "Installed Xray-core %@";
+"No Xray-core download is available for this Mac." = "No Xray-core download is available for this Mac.";
+"Failed to extract the downloaded archive." = "Failed to extract the downloaded archive.";
+"The downloaded archive did not contain an xray binary." = "The downloaded archive did not contain an xray binary.";
+"Download failed from GitHub and all mirrors." = "Download failed from GitHub and all mirrors.";
 "System Proxy Ports" = "System Proxy Ports";
 "HTTP Proxy Port" = "HTTP Proxy Port";
 "SOCKS5 Proxy Port" = "SOCKS5 Proxy Port";
@@ -143,6 +153,8 @@
 "Filter logs..." = "Filter logs...";
 "All" = "All";
 "Auto Scroll" = "Auto Scroll";
+"Newest First" = "Newest First";
+"Oldest First" = "Oldest First";
 "Clear Logs" = "Clear Logs";
 "Debug" = "Debug";
 "Info" = "Info";
@@ -172,3 +184,76 @@
 "Update failed" = "Update failed";
 "Are you sure?" = "Are you sure?";
 "This action cannot be undone." = "This action cannot be undone.";
+
+/* MARK: - Node editor */
+"Failed to run xray x25519: %@" = "Failed to run xray x25519: %@";
+"Could not parse keypair from xray output: %@" = "Could not parse keypair from xray output: %@";
+"Basics" = "Basics";
+"Name" = "Name";
+"Credentials" = "Credentials";
+"UUID" = "UUID";
+"Alter ID" = "Alter ID";
+"Encryption" = "Encryption";
+"Flow" = "Flow";
+"Password" = "Password";
+"Method" = "Method";
+"Username" = "Username";
+"This protocol has no editable credentials." = "This protocol has no editable credentials.";
+"Transport" = "Transport";
+"Network" = "Network";
+"Path" = "Path";
+"Host" = "Host";
+"Service Name" = "Service Name";
+"gRPC Mode" = "gRPC Mode";
+"Mode" = "Mode";
+"Header Type" = "Header Type";
+"Seed" = "Seed";
+"QUIC Security" = "QUIC Security";
+"QUIC Key" = "QUIC Key";
+"Security" = "Security";
+"SNI" = "SNI";
+"ALPN" = "ALPN";
+"Allow Insecure" = "Allow Insecure";
+"SNI (Server Name)" = "SNI (Server Name)";
+"Public Key" = "Public Key";
+"Generate Keypair" = "Generate Keypair";
+"Short ID" = "Short ID";
+"SpiderX" = "SpiderX";
+"Private key (configure on your server — not stored here):" = "Private key (configure on your server — not stored here):";
+"Fingerprint" = "Fingerprint";
+"(none)" = "(none)";
+"Address is required." = "Address is required.";
+"Port must be between 1 and 65535." = "Port must be between 1 and 65535.";
+"New Node" = "New Node";
+
+/* MARK: - Strategy groups (balancer) */
+"Random" = "Random";
+"Least Ping" = "Least Ping";
+"Least Load" = "Least Load";
+"No strategy groups yet." = "No strategy groups yet.";
+"Strategy Groups (Balancer)" = "Strategy Groups (Balancer)";
+"New Group" = "New Group";
+"Load-balance across multiple nodes using Xray's balancer (leastPing / leastLoad / random)." = "Load-balance across multiple nodes using Xray's balancer (leastPing / leastLoad / random).";
+"Untitled group" = "Untitled group";
+"members" = "members";
+"Edit Strategy Group" = "Edit Strategy Group";
+"Strategy" = "Strategy";
+"Health Check" = "Health Check";
+"Probe URL" = "Probe URL";
+"Probe Interval" = "Probe Interval";
+"Members" = "Members";
+"No nodes available." = "No nodes available.";
+
+/* MARK: - Appearance / theme */
+"Appearance" = "Appearance";
+"System" = "System";
+"Light" = "Light";
+"Dark" = "Dark";
+
+/* MARK: - Node sharing (QR) */
+"Share QR" = "Share QR";
+"This node can't be exported to a share link." = "This node can't be exported to a share link.";
+
+/* MARK: - Routing rule enhancements */
+"Drag to reorder rules." = "Drag to reorder rules.";
+"Tap to add a common matcher" = "Tap to add a common matcher";

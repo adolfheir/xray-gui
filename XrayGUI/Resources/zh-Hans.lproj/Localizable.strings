@@ -21,6 +21,7 @@
 "Update" = "更新";
 "Refresh" = "刷新";
 "Copy" = "复制";
+"Clear" = "清除";
 "Settings" = "设置";
 "About" = "关于";
 "Loading…" = "加载中…";
@@ -68,6 +69,8 @@
 "Current Node" = "当前节点";
 "Latency" = "延迟";
 "Test Latency" = "测试延迟";
+"Test Speed" = "测速";
+"failed" = "失败";
 "Upload" = "上传";
 "Download" = "下载";
 "Speed" = "速度";
@@ -118,6 +121,13 @@
 "Path to xray binary" = "Xray 可执行文件路径";
 "Binary found" = "已找到可执行文件";
 "Binary not found at this path" = "此路径下未找到可执行文件";
+"Download from GitHub" = "从 GitHub 下载";
+"Downloads the latest Xray-core release for your Mac and installs it automatically." = "自动下载并安装适用于本机的最新 Xray 内核。";
+"Installed Xray-core %@" = "已安装 Xray 内核 %@";
+"No Xray-core download is available for this Mac." = "没有适用于本机的 Xray 内核下载。";
+"Failed to extract the downloaded archive." = "解压下载的压缩包失败。";
+"The downloaded archive did not contain an xray binary." = "下载的压缩包中不包含 xray 可执行文件。";
+"Download failed from GitHub and all mirrors." = "从 GitHub 及所有镜像源下载均失败。";
 "System Proxy Ports" = "系统代理端口";
 "HTTP Proxy Port" = "HTTP 代理端口";
 "SOCKS5 Proxy Port" = "SOCKS5 代理端口";
@@ -143,6 +153,8 @@
 "Filter logs..." = "筛选日志…";
 "All" = "全部";
 "Auto Scroll" = "自动滚动";
+"Newest First" = "最新在前";
+"Oldest First" = "最旧在前";
 "Clear Logs" = "清空日志";
 "Debug" = "调试";
 "Info" = "信息";
@@ -172,3 +184,76 @@
 "Update failed" = "更新失败";
 "Are you sure?" = "确定吗？";
 "This action cannot be undone." = "此操作无法撤销。";
+
+/* MARK: - 节点编辑器 */
+"Failed to run xray x25519: %@" = "运行 xray x25519 失败：%@";
+"Could not parse keypair from xray output: %@" = "无法从 xray 输出中解析密钥对：%@";
+"Basics" = "基础";
+"Name" = "名称";
+"Credentials" = "凭证";
+"UUID" = "UUID";
+"Alter ID" = "Alter ID";
+"Encryption" = "加密方式";
+"Flow" = "流控";
+"Password" = "密码";
+"Method" = "加密算法";
+"Username" = "用户名";
+"This protocol has no editable credentials." = "该协议没有可编辑的凭证。";
+"Transport" = "传输";
+"Network" = "传输方式";
+"Path" = "路径";
+"Host" = "Host";
+"Service Name" = "服务名称";
+"gRPC Mode" = "gRPC 模式";
+"Mode" = "模式";
+"Header Type" = "头部类型";
+"Seed" = "Seed";
+"QUIC Security" = "QUIC 加密";
+"QUIC Key" = "QUIC 密钥";
+"Security" = "安全";
+"SNI" = "SNI";
+"ALPN" = "ALPN";
+"Allow Insecure" = "允许不安全连接";
+"SNI (Server Name)" = "SNI（服务器名）";
+"Public Key" = "公钥";
+"Generate Keypair" = "生成密钥对";
+"Short ID" = "Short ID";
+"SpiderX" = "SpiderX";
+"Private key (configure on your server — not stored here):" = "私钥（请在服务端配置——此处不会保存）：";
+"Fingerprint" = "指纹";
+"(none)" = "（无）";
+"Address is required." = "地址不能为空。";
+"Port must be between 1 and 65535." = "端口必须在 1 到 65535 之间。";
+"New Node" = "新建节点";
+
+/* MARK: - 策略组（负载均衡） */
+"Random" = "随机";
+"Least Ping" = "最低延迟";
+"Least Load" = "最低负载";
+"No strategy groups yet." = "暂无策略组。";
+"Strategy Groups (Balancer)" = "策略组（负载均衡）";
+"New Group" = "新建策略组";
+"Load-balance across multiple nodes using Xray's balancer (leastPing / leastLoad / random)." = "使用 Xray 负载均衡器跨多个节点分流（leastPing / leastLoad / random）。";
+"Untitled group" = "未命名策略组";
+"members" = "成员";
+"Edit Strategy Group" = "编辑策略组";
+"Strategy" = "策略";
+"Health Check" = "健康检查";
+"Probe URL" = "探测 URL";
+"Probe Interval" = "探测间隔";
+"Members" = "成员";
+"No nodes available." = "暂无可用节点。";
+
+/* MARK: - 外观/主题 */
+"Appearance" = "外观";
+"System" = "系统";
+"Light" = "浅色";
+"Dark" = "深色";
+
+/* MARK: - 节点分享(二维码) */
+"Share QR" = "分享二维码";
+"This node can't be exported to a share link." = "该节点无法导出为分享链接。";
+
+/* MARK: - 路由规则增强 */
+"Drag to reorder rules." = "拖动可重新排序规则。";
+"Tap to add a common matcher" = "点击添加常用匹配项";

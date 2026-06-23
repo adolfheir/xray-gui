@@ -20,6 +20,10 @@ struct SettingsView: View {
 
     @State private var isCheckingUpdate = false
 
+    // Live state for the "Download" action that fetches Xray-core from GitHub.
+    @State private var isDownloadingCore = false
+    @State private var downloadProgress: Double = 0
+
     private let logLevels = ["debug", "info", "warning", "error", "none"]
 
     var body: some View {
@@ -48,23 +52,73 @@ struct SettingsView: View {
 
     private var xrayCoreSection: some View {
         Section("Xray Core".localized) {
+            // Path gets a full-width row of its own so long paths aren't cramped.
+            // Monospaced + single line; hover shows the full path.
+            TextField("Binary path".localized, text: $xrayPath)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.callout, design: .monospaced))
+                .lineLimit(1)
+                .help(xrayPath.isEmpty ? "Binary path".localized : xrayPath)
+                .onChange(of: xrayPath) { newValue in
+                    XrayCoreManager.shared.xrayBinaryPath = newValue
+                }
+
+            // Actions + live status on one row.
             HStack(spacing: 8) {
-                TextField("Binary path".localized, text: $xrayPath)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: xrayPath) { newValue in
-                        XrayCoreManager.shared.xrayBinaryPath = newValue
-                    }
                 Button("Browse…".localized) { browseForXrayBinary() }
                 Button("Test".localized) { testXrayBinary() }
                     .disabled(!xrayBinaryExists)
+                Spacer()
+                Label {
+                    Text((xrayBinaryExists ? "Binary found" : "Binary not found at this path").localized)
+                } icon: {
+                    Image(systemName: xrayBinaryExists ? "checkmark.circle.fill" : "xmark.circle.fill")
+                }
+                .font(.caption)
+                .foregroundStyle(xrayBinaryExists ? .green : .red)
+                .labelStyle(.titleAndIcon)
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: xrayBinaryExists ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(xrayBinaryExists ? .green : .red)
-                Text((xrayBinaryExists ? "Binary found" : "Binary not found at this path").localized)
-                    .font(.caption)
-                    .foregroundStyle(xrayBinaryExists ? .green : .red)
+            // Auto-download row.
+            HStack(spacing: 8) {
+                Button("Download from GitHub".localized) { downloadXrayBinary() }
+                    .disabled(isDownloadingCore)
+                if isDownloadingCore {
+                    ProgressView(value: downloadProgress)
+                        .frame(width: 120)
+                    Text("\(Int(downloadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Spacer()
+            }
+
+            Text("Downloads the latest Xray-core release for your Mac and installs it automatically.".localized)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func downloadXrayBinary() {
+        isDownloadingCore = true
+        downloadProgress = 0
+        Task {
+            do {
+                let result = try await XrayCoreDownloader.installLatest { fraction in
+                    Task { @MainActor in downloadProgress = fraction }
+                }
+                await MainActor.run {
+                    xrayPath = result.path
+                    XrayCoreManager.shared.xrayBinaryPath = result.path
+                    appState.infoMessage = "Installed Xray-core %@".localized(result.version)
+                    isDownloadingCore = false
+                }
+            } catch {
+                await MainActor.run {
+                    appState.errorMessage = error.localizedDescription
+                    isDownloadingCore = false
+                }
             }
         }
     }
@@ -237,6 +291,12 @@ struct SettingsView: View {
             Picker("Language".localized, selection: $appState.appLanguage) {
                 ForEach(AppLanguage.allCases, id: \.self) { lang in
                     Text(lang.displayName).tag(lang)
+                }
+            }
+
+            Picker("Appearance".localized, selection: $appState.appTheme) {
+                ForEach(AppTheme.allCases) { theme in
+                    Text(theme.displayName.localized).tag(theme)
                 }
             }
         }

@@ -27,6 +27,9 @@ enum ConfigBuilder {
         /// A mandatory field for the node's protocol is missing (e.g. a VLESS UUID,
         /// a Trojan password, a WireGuard secret key).
         case missingField(String)
+        /// A strategy group has no Xray-supported member nodes, so no balancer
+        /// outbounds can be generated.
+        case emptyGroup
 
         var errorDescription: String? {
             switch self {
@@ -34,6 +37,8 @@ enum ConfigBuilder {
                 return "Protocol \"\(proto.displayName)\" is not supported by Xray-core and cannot be converted into an outbound."
             case .missingField(let field):
                 return "Required field \"\(field)\" is missing for the selected node."
+            case .emptyGroup:
+                return "The selected strategy group has no Xray-supported member nodes."
             }
         }
     }
@@ -46,7 +51,20 @@ enum ConfigBuilder {
     /// output is deterministic (stable key ordering) and readable (no escaped slashes).
     static func buildConfig(node: ProxyNode, routing: RoutingSettings, options: ConfigBuildOptions) throws -> Data {
         let object = try buildConfigObject(node: node, routing: routing, options: options)
-        return try JSONSerialization.data(
+        return try serialize(object)
+    }
+
+    /// Builds a balancer-backed Xray configuration from a strategy `group` (the
+    /// pre-resolved member `nodes` define the balancer's outbounds and tag order) and
+    /// serializes it to pretty-printed JSON.
+    static func buildConfig(group: NodeGroup, nodes: [ProxyNode], routing: RoutingSettings, options: ConfigBuildOptions) throws -> Data {
+        let object = try buildConfigObject(group: group, nodes: nodes, routing: routing, options: options)
+        return try serialize(object)
+    }
+
+    /// Shared JSON serialization with deterministic key ordering and unescaped slashes.
+    private static func serialize(_ object: [String: Any]) throws -> Data {
+        try JSONSerialization.data(
             withJSONObject: object,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         )
@@ -57,6 +75,100 @@ enum ConfigBuilder {
     /// The structure follows the Xray-core schema: `log`, `inbounds`, `outbounds`,
     /// `routing`, and (conditionally) `dns`, `stats`, `api`, and `policy`.
     static func buildConfigObject(node: ProxyNode, routing: RoutingSettings, options: ConfigBuildOptions) throws -> [String: Any] {
+        // Single-node path: the proxy outbound (tag "proxy") is the implicit default,
+        // so no balancer is involved.
+        let outbounds = try buildOutbounds(node: node, options: options)
+        let routingObject = buildRouting(routing: routing, options: options)
+        return assembleConfig(outbounds: outbounds, routing: routingObject, settings: routing, options: options)
+    }
+
+    /// Builds a minimal, self-contained probe configuration for an on-demand
+    /// *latency test*: a single ephemeral SOCKS inbound on `socksPort` feeding the
+    /// one `node` outbound (Xray's implicit default).
+    ///
+    /// Deliberately omits DNS, stats/api, routing rules, mux and the HTTP inbound so
+    /// the throwaway instance boots fast and never collides with the live core's
+    /// ports. Used by `NodeLatencyProbe` to measure real end-to-end RTT *through* the
+    /// node rather than a bare TCP handshake to its address.
+    static func buildProbeConfig(node: ProxyNode, socksPort: Int, options: ConfigBuildOptions) throws -> Data {
+        let proxy = try buildProxyOutbound(node: node, options: options)
+        let config: [String: Any] = [
+            "log": ["loglevel": "none"],
+            "inbounds": [[
+                "tag": "socks",
+                "listen": "127.0.0.1",
+                "port": socksPort,
+                "protocol": "socks",
+                "settings": ["udp": false, "auth": "noauth"]
+            ]],
+            "outbounds": [proxy] + auxiliaryOutbounds()
+        ]
+        return try serialize(config)
+    }
+
+    /// Builds the complete Xray configuration for a load-balancing strategy `group`.
+    ///
+    /// `nodes` are the group's pre-resolved member nodes (their order defines the
+    /// `proxy-0`, `proxy-1`, … tag order). Unsupported protocols are filtered out; if
+    /// no supported member remains, `BuildError.emptyGroup` is thrown.
+    ///
+    /// The generated config differs from the single-node path in three places: one
+    /// proxy outbound per member, a `routing.balancers` entry that all proxy-bound
+    /// rules route to via `balancerTag`, and (for `leastPing` / `leastLoad`) a
+    /// top-level `observatory` health-probe block. `inbounds`, `dns`, and `stats`
+    /// are identical to the single-node path.
+    static func buildConfigObject(group: NodeGroup, nodes: [ProxyNode], routing: RoutingSettings, options: ConfigBuildOptions) throws -> [String: Any] {
+        let members = nodes.filter(\.supportedByXray)
+        guard !members.isEmpty else { throw BuildError.emptyGroup }
+
+        let balancerTag = "balancer"
+
+        // One proxy outbound per member, tagged "proxy-<index>" so the balancer's
+        // "proxy-" selector prefix can match them.
+        var outbounds: [[String: Any]] = []
+        for (index, member) in members.enumerated() {
+            var proxy = try buildProxyOutbound(node: member, options: options, tag: "proxy-\(index)")
+            if options.enableMux {
+                proxy["mux"] = [
+                    "enabled": true,
+                    "concurrency": options.muxConcurrency
+                ]
+            }
+            outbounds.append(proxy)
+        }
+        outbounds.append(contentsOf: auxiliaryOutbounds())
+
+        // Routing rules route the proxy action to the balancer instead of an outbound.
+        var routingObject = buildRouting(routing: routing, options: options, balancerTag: balancerTag)
+        routingObject["balancers"] = [[
+            "tag": balancerTag,
+            "selector": ["proxy-"],
+            "strategy": ["type": group.strategy.rawValue]
+        ]]
+
+        var config = assembleConfig(outbounds: outbounds, routing: routingObject, settings: routing, options: options)
+
+        // Observatory health probing (leastPing / leastLoad only).
+        if group.strategy.needsObservatory {
+            config["observatory"] = [
+                "subjectSelector": ["proxy-"],
+                "probeURL": nonEmpty(group.probeURL) ?? "https://www.gstatic.com/generate_204",
+                "probeInterval": nonEmpty(group.probeInterval) ?? "5m"
+            ]
+        }
+
+        return config
+    }
+
+    /// Assembles the shared, path-independent parts of the config (`log`, `inbounds`,
+    /// `dns`, `stats`/`api`/`policy`) around the already-built `outbounds` and
+    /// `routing` objects.
+    private static func assembleConfig(
+        outbounds: [[String: Any]],
+        routing routingObject: [String: Any],
+        settings routing: RoutingSettings,
+        options: ConfigBuildOptions
+    ) -> [String: Any] {
         var config: [String: Any] = [:]
 
         // log
@@ -65,11 +177,11 @@ enum ConfigBuilder {
         // inbounds
         config["inbounds"] = buildInbounds(options: options)
 
-        // outbounds (proxy first — it is the implicit default outbound)
-        config["outbounds"] = try buildOutbounds(node: node, options: options)
+        // outbounds
+        config["outbounds"] = outbounds
 
         // routing
-        config["routing"] = buildRouting(routing: routing, options: options)
+        config["routing"] = routingObject
 
         // dns (optional)
         if routing.enableDNS {
@@ -175,6 +287,12 @@ enum ConfigBuilder {
             ]
         }
 
+        return [proxy] + auxiliaryOutbounds()
+    }
+
+    /// The non-proxy outbounds (`direct`, `block`) shared by both the single-node and
+    /// the balancer paths.
+    private static func auxiliaryOutbounds() -> [[String: Any]] {
         let direct: [String: Any] = [
             "protocol": "freedom",
             "tag": "direct",
@@ -189,17 +307,18 @@ enum ConfigBuilder {
             "tag": "block"
         ]
 
-        return [proxy, direct, block]
+        return [direct, block]
     }
 
-    /// Builds the protocol-specific proxy outbound (tag `proxy`), including the
-    /// transport `streamSettings` driven by `node.network` / `node.security`.
-    private static func buildProxyOutbound(node: ProxyNode, options: ConfigBuildOptions) throws -> [String: Any] {
+    /// Builds the protocol-specific proxy outbound (tag `proxy` by default, or a
+    /// per-member `proxy-<index>` tag in the balancer path), including the transport
+    /// `streamSettings` driven by `node.network` / `node.security`.
+    private static func buildProxyOutbound(node: ProxyNode, options: ConfigBuildOptions, tag: String = "proxy") throws -> [String: Any] {
         guard node.supportedByXray else {
             throw BuildError.unsupportedProtocol(node.protocolType)
         }
 
-        var outbound: [String: Any] = ["tag": "proxy"]
+        var outbound: [String: Any] = ["tag": tag]
         var settings: [String: Any] = [:]
 
         switch node.protocolType {
@@ -338,9 +457,15 @@ enum ConfigBuilder {
         case "tls", "xtls":
             // XTLS shares the same client-side settings object as TLS.
             var tls: [String: Any] = [
-                "serverName": nonEmpty(node.sni) ?? nonEmpty(node.host) ?? node.address,
-                "allowInsecure": node.allowInsecure
+                "serverName": nonEmpty(node.sni) ?? nonEmpty(node.host) ?? node.address
             ]
+            // `allowInsecure` was removed in the Xray-core v25+ line (migrated to
+            // `pinnedPeerCertSha256`); its mere presence — even as `false` — makes the
+            // newer core reject the whole config. Emit it only when the node requests
+            // it AND the installed core still understands it.
+            if node.allowInsecure, XrayCoreManager.shared.coreSupportsAllowInsecure {
+                tls["allowInsecure"] = true
+            }
             let alpn = split(node.alpn)
             insertIfPresent(&tls, "alpn", alpn.isEmpty ? nil : alpn)
             insertIfPresent(&tls, "fingerprint", nonEmpty(node.fingerprint))
@@ -444,8 +569,36 @@ enum ConfigBuilder {
 
     // MARK: - Routing
 
-    private static func buildRouting(routing: RoutingSettings, options: ConfigBuildOptions) -> [String: Any] {
+    /// Builds the `routing` object.
+    ///
+    /// When `balancerTag` is non-nil the config has no implicit default proxy outbound
+    /// (a balancer is not an outbound), so two things change: every rule that would
+    /// route to the "proxy" outbound instead routes to the balancer via `balancerTag`,
+    /// and the modes that relied on the implicit default (`global`, `bypassMainland`,
+    /// `custom`) gain an explicit catch-all rule sending the remainder to the balancer.
+    private static func buildRouting(routing: RoutingSettings, options: ConfigBuildOptions, balancerTag: String? = nil) -> [String: Any] {
         var rules: [[String: Any]] = []
+
+        /// Routes a rule to the proxy action: an `outboundTag: "proxy"` in the
+        /// single-node path, or a `balancerTag` in the balancer path.
+        func applyProxyAction(_ rule: inout [String: Any]) {
+            if let balancerTag {
+                rule["balancerTag"] = balancerTag
+            } else {
+                rule["outboundTag"] = "proxy"
+            }
+        }
+
+        /// A catch-all rule routing everything left to the proxy action. Only needed
+        /// in the balancer path, where there is no implicit default outbound.
+        func balancerCatchAll() -> [String: Any]? {
+            guard let balancerTag else { return nil }
+            return [
+                "type": "field",
+                "port": "0-65535",
+                "balancerTag": balancerTag
+            ]
+        }
 
         // 1. API rule (must come first so stats traffic is short-circuited).
         if statsEnabled(options) {
@@ -462,10 +615,12 @@ enum ConfigBuilder {
             if rule.domains.isEmpty && rule.ips.isEmpty && nonEmpty(rule.port) == nil {
                 continue
             }
-            var mapped: [String: Any] = [
-                "type": "field",
-                "outboundTag": outboundTag(for: rule.outbound)
-            ]
+            var mapped: [String: Any] = ["type": "field"]
+            if rule.outbound == .proxy {
+                applyProxyAction(&mapped)
+            } else {
+                mapped["outboundTag"] = outboundTag(for: rule.outbound)
+            }
             insertIfPresent(&mapped, "domain", rule.domains.isEmpty ? nil : rule.domains)
             insertIfPresent(&mapped, "ip", rule.ips.isEmpty ? nil : rule.ips)
             insertIfPresent(&mapped, "port", nonEmpty(rule.port))
@@ -494,8 +649,9 @@ enum ConfigBuilder {
         // 5. Mode-specific preset rules.
         switch routing.mode {
         case .global:
-            // Nothing extra: the proxy outbound is the implicit default.
-            break
+            // Everything proxied. In the single-node path the proxy outbound is the
+            // implicit default; in the balancer path an explicit catch-all is needed.
+            if let catchAll = balancerCatchAll() { rules.append(catchAll) }
 
         case .bypassMainland:
             rules.append([
@@ -508,6 +664,8 @@ enum ConfigBuilder {
                 "ip": ["geoip:cn"],
                 "outboundTag": "direct"
             ])
+            // Remainder → proxy (implicit default for single-node; explicit for balancer).
+            if let catchAll = balancerCatchAll() { rules.append(catchAll) }
 
         case .directMainlandProxyRest:
             rules.append([
@@ -529,8 +687,10 @@ enum ConfigBuilder {
             ])
 
         case .custom:
-            // No preset: only custom + LAN/ads rules above apply.
-            break
+            // No preset: only custom + LAN/ads rules above apply. In the balancer path
+            // anything unmatched would have no default outbound, so route it to the
+            // balancer as a catch-all.
+            if let catchAll = balancerCatchAll() { rules.append(catchAll) }
         }
 
         return [
