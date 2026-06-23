@@ -54,9 +54,8 @@ jobs:
             -derivedDataPath build \
             ARCHS="arm64 x86_64" \
             ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=YES \
             ENABLE_HARDENED_RUNTIME=NO \
             build
 
@@ -69,8 +68,11 @@ jobs:
           mkdir -p dist
           cp -R "$APP" dist/XrayGUI.app
           cd dist
-          # Strip quarantine so users can open the unsigned app more easily.
+          # Strip quarantine, then ad-hoc re-sign the bundle (incl. the embedded helper)
+          # so the arm64 binary carries the signature Apple Silicon requires to run.
           xattr -cr XrayGUI.app
+          codesign --force --deep --sign - XrayGUI.app
+          codesign --verify --deep --strict XrayGUI.app && echo "ad-hoc signature OK"
           ZIP="XrayGUI-${{ github.ref_name }}-macOS.zip"
           zip -r --symlinks "$ZIP" XrayGUI.app
           shasum -a 256 "$ZIP" > "$ZIP.sha256"
@@ -100,11 +102,14 @@ jobs:
             3. Download an Xray binary from [XTLS/Xray-core releases](https://github.com/XTLS/Xray-core/releases)
             4. Launch XrayGUI → Settings → set the Xray binary path
 
-            > **Note:** The app is unsigned. On first launch: right-click → Open, or run:
+            > **Note:** The app is ad-hoc signed but not notarized. After moving it to
+            > `/Applications`, clear the download quarantine once so Gatekeeper allows it:
             > ```bash
             > xattr -cr /Applications/XrayGUI.app
             > ```
-            > TUN mode additionally requires a code-signed build, a tun2socks binary, and the privileged helper.
+            > Then open it (right-click → Open the first time if prompted). TUN mode
+            > additionally requires a Developer ID–signed build, a tun2socks binary, and
+            > the privileged helper; System Proxy and Manual modes work as-is.
           files: |
             dist/*.zip
             dist/*.sha256
